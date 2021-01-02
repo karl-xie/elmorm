@@ -1,6 +1,10 @@
 -ifndef(ELMORM_H_H).
 -define(ELMORM_H_H, true).
 
+-define(NEWLINE, <<"\n">>).
+-define(TAB, <<"    ">>).
+-define(DEFAULT_OPTIONS, #{newline => ?NEWLINE, tab => ?TAB}).
+
 -record(elm_index_field, {
     seq :: integer(),
     col_seq :: integer(),

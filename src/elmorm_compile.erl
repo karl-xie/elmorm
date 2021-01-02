@@ -2,51 +2,60 @@
 
 -include("elmorm.hrl").
 
--export([foo/0]).
 -export([parse_file/1]).
-
-foo() ->
-    parse_file("./test.kkk").
+-export([parse_binary/1]).
 
 parse_file(FileName) ->
     case file:read_file(FileName) of
     {ok, Binary} ->
-        List = unicode:characters_to_list(Binary),
-        case elmorm_scanner:string(List) of
-        {ok, Tokens, _Line} ->
-            case elmorm_parser:parse(Tokens) of
-            {ok, Parsed} ->
-                collect_tables(Parsed);
-            {error, Error} ->
-                {error, Error}
-            end;
-        {error, Error, Line} ->
-            {error, {Error, Line}}
-        end;
+        parse_binary(Binary);
     {error, Reason} ->
         {error, Reason}
     end.
 
-collect_tables(Parsed) ->
-    {ok, collect_table(Parsed, [])}.
+parse_binary(Binary) ->
+    List = unicode:characters_to_list(Binary),
+    case elmorm_scanner:string(List) of
+    {ok, Tokens, _Line} ->
+        case elmorm_parser:parse(Tokens) of
+        {ok, Parsed} ->
+            collect_tables(Parsed);
+        {error, Error} ->
+            {error, Error}
+        end;
+    {error, Error, Line} ->
+        {error, {Error, Line}}
+    end.
 
-collect_table([], Result) -> lists:reverse(Result);
+collect_tables(Parsed) ->
+    collect_table(Parsed, []).
+
+collect_table([], Result) -> {ok, lists:reverse(Result)};
 collect_table([{table, Name, TableOpts, TableDefinds} | T], Result) ->
-    Options = collect_table_opts(TableOpts),
-    {ok, FieldL, IndexL, PrimaryL} = collect_table_defs(TableDefinds),
-    case PrimaryL of
-    [] -> skip;
-    [_] -> skip;
-    _ -> exit({too_many_primary_key, PrimaryL})
-    end,
-    Table = #elm_table{
-        name = erlang:list_to_binary(Name),
-        options = Options,
-        fields = FieldL,
-        primary_key = PrimaryL,
-        index = IndexL
-    },
-    collect_table(T, [Table | Result]);
+    case collect_table_opts(TableOpts) of
+    {ok, Options} ->
+        case collect_table_defs(TableDefinds) of
+        {ok, FieldL, IndexL, PrimaryL} ->
+            LenOfPrimary = length(PrimaryL),
+            case LenOfPrimary > 1 of
+            true -> 
+                {error, {Name, {too_many_primary_key, PrimaryL}}};
+            false ->
+                Table = #elm_table{
+                    name = erlang:list_to_binary(Name),
+                    options = Options,
+                    fields = FieldL,
+                    primary_key = PrimaryL,
+                    index = IndexL
+                },
+                collect_table(T, [Table | Result])
+            end;
+        {error, Error} ->
+            {error, {Name, Error}}
+        end;
+    {error, Error} ->
+        {error, {Name, Error}}
+    end;
 collect_table([{drop_table, _Names} | T], Result) ->
     collect_table(T, Result);
 collect_table([{set, _Scope, _VarName, _Value} | T], Result) ->
@@ -58,7 +67,7 @@ collect_table([_ | T], Result) ->
 
 collect_table_opts(TableOpts) ->
     collect_table_opt(TableOpts, ?TABLE_OPTS).
-collect_table_opt([], Opts) -> Opts;
+collect_table_opt([], Opts) -> {ok, Opts};
 collect_table_opt([{charset, Charset} | T], Opts) ->
     collect_table_opt(T, Opts#{charset => Charset});
 collect_table_opt([{engine, Engine} | T], Opts) ->
@@ -72,8 +81,7 @@ collect_table_opt([{codec, Codec} | T], Opts) when is_list(Codec) ->
 collect_table_opt([{auto_increment, AutoInc} | T], Opts) when is_integer(AutoInc) ->
     collect_table_opt(T, Opts#{auto_increment => AutoInc});
 collect_table_opt([H | _T], _Opts) ->
-    exit({unrecognized_table_opt, H}).
-
+    {error, {unrecognized_table_opt, H}}.
 
 collect_table_defs(TableDefinds) ->
     Map = #{
@@ -89,23 +97,31 @@ collect_table_def([], Map) ->
     {ok, lists:reverse(Cols), Indexs2, lists:reverse(Primary)};
 collect_table_def([{col, Name, DataType, ColOptions} | T], Map) ->
     #{col_seq := ColSeq, cols := Cols} = Map,
-    {DType, DLen, Charset, IsSigned} = decode_data_type(DataType),
-    Options = collect_column_opts(ColOptions),
-    case Cols of
-    [] -> PreColName = undefined;
-    [PreCol | _] -> PreColName = PreCol#elm_field.name
-    end,
-    Col = #elm_field{
-        seq = ColSeq,
-        name = erlang:list_to_binary(Name),
-        pre_col_name = PreColName,
-        data_type = DType,
-        data_len = DLen,
-        charset = Charset,
-        is_signed = IsSigned,
-        options = Options
-    },
-    collect_table_def(T, Map#{col_seq => ColSeq + 1, cols => [Col | Cols]});
+    case decode_data_type(DataType) of
+        {ok, {DType, DLen, Charset, IsSigned}} ->
+            case collect_column_opts(ColOptions) of
+            {ok, Options} ->
+                case Cols of
+                [] -> PreColName = undefined;
+                [PreCol | _] -> PreColName = PreCol#elm_field.name
+                end,
+                Col = #elm_field{
+                    seq = ColSeq,
+                    name = erlang:list_to_binary(Name),
+                    pre_col_name = PreColName,
+                    data_type = DType,
+                    data_len = DLen,
+                    charset = Charset,
+                    is_signed = IsSigned,
+                    options = Options
+                },
+                collect_table_def(T, Map#{col_seq => ColSeq + 1, cols => [Col | Cols]});
+            {error, Error} ->
+                {error, Error}
+            end;
+        {error, Error} ->
+            {error, Error}
+    end;
 collect_table_def([{idx, NameAndType, IdxParts} | T], Map) ->
     #{idx_seq := IdxSeq, indexs := Indexs, cols := Cols, idx_name := IName} = Map,
     case proplists:get_value(name, NameAndType, undefined) of
@@ -117,26 +133,34 @@ collect_table_def([{idx, NameAndType, IdxParts} | T], Map) ->
         NIName = maps:put(Name, true, IName)
     end,
     IdxType = proplists:get_value(type, NameAndType, undefined),
-    Fields = collect_index_parts(IdxParts, Cols),
-    Index = #elm_index{
-        seq = IdxSeq,
-        name = Name,
-        class = normal,
-        index_type = IdxType,
-        fields = Fields
-    },
-    collect_table_def(T, Map#{idx_seq => IdxSeq + 1, indexs => [Index | Indexs], idx_name => NIName});
+    case collect_index_parts(IdxParts, Cols) of
+    {ok, Fields} ->
+        Index = #elm_index{
+            seq = IdxSeq,
+            name = Name,
+            class = normal,
+            index_type = IdxType,
+            fields = Fields
+        },
+        collect_table_def(T, Map#{idx_seq => IdxSeq + 1, indexs => [Index | Indexs], idx_name => NIName});
+    {error, Error} ->
+        {error, Error}
+    end;
 collect_table_def([{primary, IdxType, IdxParts} | T], Map) ->
     #{pri_seq := PSeq, pri := Primary, cols := Cols} = Map,
-    Fields = collect_index_parts(IdxParts, Cols),
-    Index = #elm_index{
-        seq = PSeq,
-        name = undefined,
-        class = primary,
-        index_type = IdxType,
-        fields = Fields
-    },
-    collect_table_def(T, Map#{pri_seq => PSeq + 1, pri => [Index | Primary]});
+    case collect_index_parts(IdxParts, Cols) of
+    {ok, Fields} ->
+        Index = #elm_index{
+            seq = PSeq,
+            name = undefined,
+            class = primary,
+            index_type = IdxType,
+            fields = Fields
+        },
+        collect_table_def(T, Map#{pri_seq => PSeq + 1, pri => [Index | Primary]});
+    {error, Error} ->
+        {error, Error}
+    end;
 collect_table_def([{unique_idx, NameAndType, IdxParts} | T], Map) ->
     #{idx_seq := IdxSeq, indexs := Indexs, cols := Cols, idx_name := IName} = Map,
     case proplists:get_value(name, NameAndType, undefined) of
@@ -148,17 +172,21 @@ collect_table_def([{unique_idx, NameAndType, IdxParts} | T], Map) ->
         NIName = maps:put(Name, true, IName)
     end,
     IdxType = proplists:get_value(type, NameAndType, undefined),
-    Fields = collect_index_parts(IdxParts, Cols),
-    Index = #elm_index{
-        seq = IdxSeq,
-        name = Name,
-        class = unique,
-        index_type = IdxType,
-        fields = Fields
-    },
-    collect_table_def(T, Map#{idx_seq => IdxSeq + 1, indexs => [Index | Indexs], idx_name => NIName});
+    case collect_index_parts(IdxParts, Cols) of
+    {ok, Fields} ->
+        Index = #elm_index{
+            seq = IdxSeq,
+            name = Name,
+            class = unique,
+            index_type = IdxType,
+            fields = Fields
+        },
+        collect_table_def(T, Map#{idx_seq => IdxSeq + 1, indexs => [Index | Indexs], idx_name => NIName});
+    {error, Error} ->
+        {error, Error}
+    end;
 collect_table_def([H | _], _Map) ->
-    exit({unrecognized_table_defind, H}).
+    {error, {unrecognized_table_defind, H}}.
 
 pretreat_index_name(Indexs, NameMap) ->
     pretreat_index_name(Indexs, NameMap, []).
@@ -185,22 +213,22 @@ calc_index_name(FCN, Num, M) ->
     false -> {ok, Name}
     end.
 
-decode_data_type({tinyint, Len, Signed}) -> {tinyint, Len, undefined, Signed};
-decode_data_type({smallint, Len, Signed}) -> {smallint, Len, undefined, Signed};
-decode_data_type({int, Len, Signed}) -> {int, Len, undefined, Signed};
-decode_data_type({bigint, Len, Signed}) -> {bigint, Len, undefined, Signed};
-decode_data_type({varchar, Len, Charset}) -> {varchar, Len, Charset, undefined};
-decode_data_type({char, Len, Charset}) -> {char, Len, Charset, undefined};
-decode_data_type(tinyblob) -> {tinyblob, undefined, undefined, undefined};
-decode_data_type(blob) -> {blob, undefined, undefined, undefined};
-decode_data_type(mediumblob) -> {mediumblob, undefined, undefined, undefined};
-decode_data_type(longblob) -> {longblob, undefined, undefined, undefined};
-decode_data_type(text) -> {text, undefined, undefined, undefined};
-decode_data_type(Other) -> exit({unrecognized_data_type, Other}).
+decode_data_type({tinyint, Len, Signed}) -> {ok, {tinyint, Len, undefined, Signed}};
+decode_data_type({smallint, Len, Signed}) -> {ok, {smallint, Len, undefined, Signed}};
+decode_data_type({int, Len, Signed}) -> {ok, {int, Len, undefined, Signed}};
+decode_data_type({bigint, Len, Signed}) -> {ok, {bigint, Len, undefined, Signed}};
+decode_data_type({varchar, Len, Charset}) -> {ok, {varchar, Len, Charset, undefined}};
+decode_data_type({char, Len, Charset}) -> {ok, {char, Len, Charset, undefined}};
+decode_data_type(tinyblob) -> {ok, {tinyblob, undefined, undefined, undefined}};
+decode_data_type(blob) -> {ok, {blob, undefined, undefined, undefined}};
+decode_data_type(mediumblob) -> {ok, {mediumblob, undefined, undefined, undefined}};
+decode_data_type(longblob) -> {ok, {longblob, undefined, undefined, undefined}};
+decode_data_type(text) -> {ok, {text, undefined, undefined, undefined}};
+decode_data_type(Other) -> {error, {unrecognized_data_type, Other}}.
 
 collect_column_opts(ColOptions) ->
     collect_column_opt(ColOptions, ?COLUMN_OPTS).
-collect_column_opt([], Opts) -> Opts;
+collect_column_opt([], Opts) -> {ok, Opts};
 collect_column_opt([{null, Nullable} | T], Opts) ->
     collect_column_opt(T, Opts#{null => Nullable});
 collect_column_opt([{default, Default} | T], Opts) when is_list(Default) ->
@@ -218,16 +246,16 @@ collect_column_opt([{collate, Collate} | T], Opts) ->
 collect_column_opt([{auto_increment, AutoInc} | T], Opts) ->
     collect_column_opt(T, Opts#{auto_increment => AutoInc});
 collect_column_opt([H | _], _Opts) ->
-    exit({unrecognized_column_option, H}).
+    {error, {unrecognized_column_option, H}}.
 
 collect_index_parts(IdxParts, Cols) ->
     collect_index_part(IdxParts, Cols, 1, []).
-collect_index_part([], _Cols, _Seq, Result) -> lists:reverse(Result);
+collect_index_part([], _Cols, _Seq, Result) -> {ok, lists:reverse(Result)};
 collect_index_part([{Name, Len, Sort} | T], Cols, Seq, Result) ->
     BName = erlang:list_to_binary(Name),
     case lists:keyfind(BName, #elm_field.name, Cols) of
     false ->
-        exit({index_column_not_found, Name});
+        {error, {index_column_not_found, Name}};
     #elm_field{seq = ColSeq} ->
         E = #elm_index_field{
             seq = Seq,

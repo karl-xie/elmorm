@@ -70,17 +70,28 @@ add_columns([H | T], FieldsA, Add) ->
     end.
 
 modify_columns(FieldsA, FieldsB, Add) ->
-    FieldsA1 = lists:foldl(fun(X, InAcc) ->
-        insert_field(X, InAcc)
-    end, FieldsA, Add),
-    F = fun(X, InAcc) ->
-        elmorm_dlink:append(X#elm_field.name, InAcc)
-    end,
-    DLA = lists:foldl(F, elmorm_dlink:empty(), FieldsA1),
-    DLB = lists:foldl(F, elmorm_dlink:empty(), FieldsB),
-    Standard = init_standard(FieldsB),
-    InitScore = calc_score(DLA, Standard),
-    {ok, modify_columns_loop(FieldsB, FieldsA1, elmorm_dlink:head(DLA), DLA, DLB, InitScore, Standard, [])}.
+    case modify_columns_insert(Add, FieldsA) of
+    {ok, FieldsA1} ->
+        F = fun(X, InAcc) ->
+            elmorm_dlink:append(X#elm_field.name, InAcc)
+        end,
+        DLA = lists:foldl(F, elmorm_dlink:empty(), FieldsA1),
+        DLB = lists:foldl(F, elmorm_dlink:empty(), FieldsB),
+        Standard = init_standard(FieldsB),
+        InitScore = calc_score(DLA, Standard),
+        {ok, modify_columns_loop(FieldsB, FieldsA1, elmorm_dlink:head(DLA), DLA, DLB, InitScore, Standard, [])};
+    {error, Error} ->
+        {error, Error}
+    end.
+
+modify_columns_insert([], Result) -> {ok, Result};
+modify_columns_insert([Field | T], Result) ->
+    case insert_field(Field, Result) of
+    {ok, Result2} ->
+        modify_columns_insert(T, Result2);
+    {error, Error} ->
+        {error, Error}
+    end.
 
 modify_columns_loop(FieldsB, FieldsA, _Cur, _DLA, _DLB, 0, _Standard, R) ->
     NewR = 
@@ -140,13 +151,13 @@ calc_score(DLA, StandardM) ->
     Score.
 
 insert_field(#elm_field{pre_col_name = undefined} = Field, L) ->
-    [Field | L];
+    {ok, [Field | L]};
 insert_field(Field, L) ->
     insert_field(L, Field, []).
 insert_field([], Field, _R) ->
-    exit({unexpect_field_seq, Field});
+    {error, {unexpect_field_seq, Field}};
 insert_field([#elm_field{name = Name} = H | T], #elm_field{pre_col_name = Name} = Field, R) ->
-    lists:reverse([H | R]) ++ [Field | T];
+    {ok, lists:reverse([H | R]) ++ [Field | T]};
 insert_field([H | T], Field, R) ->
     insert_field(T, Field, [H | R]).
 

@@ -2,13 +2,7 @@
 
 -include("elmorm.hrl").
 
--export([foo/0]).
-
--define(NEWLINE, <<"\n">>).
--define(TAB, <<"    ">>).
-
-foo() ->
-    compare("./a.kkk", "test.kkk", "./output.sql").
+-export([compare/3, compare_tables/3]).
 
 %% convert file1 to file2, output to file3
 compare(File1, File2, File3) ->
@@ -16,7 +10,7 @@ compare(File1, File2, File3) ->
     {ok, Tables1} ->
         case elmorm_compile:parse_file(File2) of
         {ok, Tables2} ->
-            Bin = compare_tables(Tables2, Tables1),
+            Bin = compare_tables(Tables2, Tables1, ?DEFAULT_OPTIONS),
             case file:open(File3, [binary, write]) of
             {ok, IoDevice} ->
                 file:write(IoDevice, Bin),
@@ -31,29 +25,31 @@ compare(File1, File2, File3) ->
     {error, Error} ->
         {error, Error}
     end.
-compare_tables(TablesA, TablesB) ->
-    compare_tables(TablesA, TablesB, []).
-compare_tables([], TablesB, R) ->
+compare_tables(TablesA, TablesB, Opts) ->
+    compare_tables(TablesA, TablesB, Opts, []).
+compare_tables([], TablesB, Opts, R) ->
+    #{newline := NewLine} = Opts,
     lists:reverse(lists:foldl(fun(X, InAcc) ->
-        [?NEWLINE, ?NEWLINE, drop_table(X#elm_table.name) | InAcc]
+        [NewLine, NewLine, drop_table(X#elm_table.name) | InAcc]
     end, R, TablesB));
-compare_tables([H | T], TablesB, R) ->
+compare_tables([H | T], TablesB, Opts, R) ->
+    #{newline := NewLine} = Opts,
     case lists:keytake(H#elm_table.name, #elm_table.name, TablesB) of
     {value, Tuple, Rest} ->
-        case table_diff(Tuple, H) of
+        case table_diff(Tuple, H, Opts) of
         <<>> ->
-            compare_tables(T, Rest, R);
+            compare_tables(T, Rest, Opts, R);
         Diff ->
-            compare_tables(T, Rest, [?NEWLINE, ?NEWLINE, Diff | R])
+            compare_tables(T, Rest, Opts, [NewLine, NewLine, Diff | R])
         end;
     false ->
-        compare_tables(T, TablesB, [?NEWLINE, ?NEWLINE, create_table(H) | R])
+        compare_tables(T, TablesB, Opts, [NewLine, NewLine, create_table(H, Opts) | R])
     end.
 
 drop_table(Name) ->
     iolist_to_binary([<<"DROP TABLE `">>, Name, <<"`;">>]).
 
-table_diff(TableA, TableB) ->
+table_diff(TableA, TableB, Opts) ->
     TName = TableA#elm_table.name,
     ALTER = <<"ALTER TABLE `", TName/binary, "` ">>,
     {ok, DiffMap} = elmorm_diff:diff(TableA, TableB),
@@ -78,14 +74,15 @@ table_diff(TableA, TableB) ->
     L = lists:foldl(fun(Y, InAcc) ->
         Y ++ InAcc
     end, [], [L7, L6, L5, L4, L3, L2, L1, L0]),
-    connact_table_diff(L).
-connact_table_diff(L) ->
-    connact_table_diff(L, <<>>).
-connact_table_diff([], Bin) -> Bin;
-connact_table_diff([H], Bin) ->
-    connact_table_diff([], <<Bin/binary, H/binary>>);
-connact_table_diff([H | T], Bin) ->
-    connact_table_diff(T, <<Bin/binary, H/binary, ?NEWLINE/binary>>).
+    connact_table_diff(L, Opts).
+connact_table_diff(L, Opts) ->
+    connact_table_diff(L, Opts, <<>>).
+connact_table_diff([], _Opts, Bin) -> Bin;
+connact_table_diff([H], Opts, Bin) ->
+    connact_table_diff([], Opts, <<Bin/binary, H/binary>>);
+connact_table_diff([H | T], Opts, Bin) ->
+    #{newline := NewLine} = Opts,
+    connact_table_diff(T, Opts, <<Bin/binary, H/binary, NewLine/binary>>).
 
 build_table_options(ALTER, TableOptDiff) ->
     case build_table_options(?TABLE_OPTS_SEQ, TableOptDiff, <<>>) of
@@ -108,16 +105,16 @@ build_table_options([H | T], TOD, R) ->
         build_table_options(T, TOD, <<R/binary, ",", (format_table_option(H, Value))/binary>>)
     end.
 
-create_table(Table) ->
+create_table(Table, Opts) ->
     Fields = format_table_fields(Table#elm_table.fields),
     PrimaryKey = format_table_pri_key(Table#elm_table.primary_key),
     Index = format_table_indexs(Table#elm_table.index),
-    TableDefine = format_table_define(Fields ++ (PrimaryKey ++ Index)),
-    %% Index = <<>>,
+    TableDefine = format_table_define(Fields ++ (PrimaryKey ++ Index), Opts),
     TableOpts = format_table_opts(Table#elm_table.options),
+    #{newline := NewLine} = Opts,
     iolist_to_binary([
         <<"CREATE TABLE `">>, Table#elm_table.name, <<"` (">>, TableDefine, 
-        ?NEWLINE, <<")">>, TableOpts, <<";">>
+        NewLine, <<")">>, TableOpts, <<";">>
     ]).
 
 %% begin of fields
@@ -266,13 +263,15 @@ format_table_index(#elm_index{class = unique} = H) ->
 %% end of index
 
 %% begin of table define
-format_table_define(TableDefines) ->
-    iolist_to_binary(format_table_define(TableDefines, [])).
-format_table_define([], R) -> lists:reverse(R);
-format_table_define([H], R) ->
-    format_table_define([], [iolist_to_binary([?NEWLINE, ?TAB, H]) | R]);
-format_table_define([H | T], R) ->
-    format_table_define(T, [iolist_to_binary([?NEWLINE, ?TAB, H, <<",">>]) | R]).
+format_table_define(TableDefines, Opts) ->
+    iolist_to_binary(format_table_define(TableDefines, Opts, [])).
+format_table_define([], _Opts, R) -> lists:reverse(R);
+format_table_define([H], Opts, R) ->
+    #{newline := NewLine, tab := Space} = Opts,
+    format_table_define([], Opts, [iolist_to_binary([NewLine, Space, H]) | R]);
+format_table_define([H | T], Opts, R) ->
+    #{newline := NewLine, tab := Space} = Opts,
+    format_table_define(T, Opts, [iolist_to_binary([NewLine, Space, H, <<",">>]) | R]).
 %% end of table define
 
 %% begin of table options
