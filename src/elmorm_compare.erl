@@ -2,7 +2,22 @@
 
 -include("elmorm.hrl").
 
--export([compare/3, compare_tables/3]).
+-export([string/2, compare/3, compare_tables/3]).
+
+%% convert s1 to s2
+string(S1, S2) ->
+    case elmorm_compile:parse_binary(S1) of
+    {ok, Tables1} ->
+        case elmorm_compile:parse_binary(S2) of
+        {ok, Tables2} ->
+            Bin = compare_tables(Tables2, Tables1, ?DEFAULT_OPTIONS),
+            {ok, Bin};
+        {error, Error} ->
+            {error, Error}
+        end;
+    {error, Error} ->
+        {error, Error}
+    end.
 
 %% convert file1 to file2, output to file3
 compare(File1, File2, File3) ->
