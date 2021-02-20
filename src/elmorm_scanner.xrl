@@ -78,4 +78,11 @@ is_keyword(session) -> true;
 is_keyword(local) -> true;
 is_keyword(auto_increment) -> true;
 is_keyword(unique) -> true;
+is_keyword(key_block_size) -> true;
+is_keyword(with) -> true;
+is_keyword(parser) -> true;
+is_keyword(visible) -> true;
+is_keyword(invisible) -> true;
+is_keyword(engine_attribute) -> true;
+is_keyword(secondary_engine_attribute) -> true;
 is_keyword(_) -> false.

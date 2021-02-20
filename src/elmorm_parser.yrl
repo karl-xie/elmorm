@@ -9,7 +9,7 @@ k_create_defs k_create_def k_nn_create_defs k_col_def k_data_type k_data_type_in
     k_data_type_charset k_default_val k_not_null_value k_name
 %% index define
     k_idx_def k_normal_idx_def k_primary_idx_def k_idx_type k_idx_parts k_idx_part k_idx_sort
-    k_unique_idx_def k_idx_name_and_type
+    k_unique_idx_def k_idx_name_and_type k_idx_options k_idx_option
 
 k_names
 
@@ -19,7 +19,8 @@ Terminals ';' '=' ',' '(' ')' '.' string integer float var name
     create table default charset character set engine comment alias codec
     tinyint smallint int bigint signed unsigned varchar char not null
     storage collate primary key index using tinyblob blob mediumblob longblob
-    drop exists if names global local session qualifier text auto_increment unique.
+    drop exists if names global local session qualifier text auto_increment unique
+    key_block_size with parser visible invisible engine_attribute secondary_engine_attribute.
 
 Rootsymbol k_elmorm.
 
@@ -93,8 +94,8 @@ k_idx_def -> k_normal_idx_def : '$1'.
 k_idx_def -> k_primary_idx_def : '$1'.
 k_idx_def -> k_unique_idx_def : '$1'.
 
-k_normal_idx_def -> index k_idx_name_and_type '(' k_idx_parts ')' : {idx, '$2', '$4'}.
-k_normal_idx_def -> key k_idx_name_and_type '(' k_idx_parts ')' : {idx, '$2', '$4'}.
+k_normal_idx_def -> index k_idx_name_and_type '(' k_idx_parts ')' k_idx_options : {idx, '$2', '$4', '$6'}.
+k_normal_idx_def -> key k_idx_name_and_type '(' k_idx_parts ')' k_idx_options : {idx, '$2', '$4', '$6'}.
 
 k_primary_idx_def -> primary key k_idx_type '(' k_idx_parts ')' : {primary, '$3', '$5'}.
 
@@ -116,6 +117,21 @@ k_idx_parts -> k_idx_part ',' k_idx_parts : ['$1' | '$3'].
 k_idx_part -> k_name k_data_type_len k_idx_sort : {'$1', '$2', '$3'}.
 k_idx_sort -> '$empty' : undefined.
 k_idx_sort -> var : unwrap('$1').
+
+k_idx_options -> '$empty' : [].
+k_idx_options -> k_idx_option k_idx_options : ['$1' | '$2'].
+
+k_idx_option -> key_block_size '=' integer : {key_block_size, unwrap('$3')}.
+k_idx_option -> key_block_size integer : {key_block_size, unwrap('$2')}.
+k_idx_option -> with parser k_var : {parser, '$3'}.
+k_idx_option -> comment string : {comment, unwrap('$2')}.
+k_idx_option -> engine_attribute '=' k_var : {engine_attribute, '$3'}.
+k_idx_option -> engine_attribute k_var : {engine_attribute, '$2'}.
+k_idx_option -> secondary_engine_attribute '=' k_var : {secondary_engine_attribute, '$3'}.
+k_idx_option -> secondary_engine_attribute k_var : {secondary_engine_attribute, '$2'}.
+k_idx_option -> using var : {using, unwrap('$2')}.
+k_idx_option -> visible : {visible, true}.
+k_idx_option -> invisible : {visible, false}.
 
 %% table options
 k_table_options -> '$empty' : [].

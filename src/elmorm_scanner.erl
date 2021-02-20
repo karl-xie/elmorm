@@ -68,6 +68,13 @@ is_keyword(session) -> true;
 is_keyword(local) -> true;
 is_keyword(auto_increment) -> true;
 is_keyword(unique) -> true;
+is_keyword(key_block_size) -> true;
+is_keyword(with) -> true;
+is_keyword(parser) -> true;
+is_keyword(visible) -> true;
+is_keyword(invisible) -> true;
+is_keyword(engine_attribute) -> true;
+is_keyword(secondary_engine_attribute) -> true;
 is_keyword(_) -> false.
 -file("c:/Program Files/erl8.3/lib/parsetools-2.1.4/include/leexinc.hrl", 14).
 
@@ -356,7 +363,7 @@ adjust_line(T, A, [_|Cs], L) ->
 %% return signal either an unrecognised character or end of current
 %% input.
 
--file("f:/github/elmorm/src/elmorm_scanner.erl", 359).
+-file("f:/github/elmorm/src/elmorm_scanner.erl", 366).
 yystate() -> 27.
 
 yystate(30, [C|Ics], Line, Tlen, Action, Alen) when C >= 48, C =< 57 ->
