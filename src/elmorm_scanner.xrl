@@ -19,6 +19,7 @@ Rules.
 {HEX} : {token, {integer, TokenLine, hex_to_int(TokenChars)}}.
 @@ : {token, {qualifier, TokenLine, "@@"}}.
 --.* : skip_token.
+(/\*([^*]|(\*+[^*/]))*\*+/)|(//.*) : skip_token. %% C-style comment
 
 
 Erlang code.
