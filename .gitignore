@@ -4,6 +4,8 @@
 *.plt
 erl_crash.dump
 .concrete/DEV_MODE
+src/*_parser.erl
+src/*_scanner.erl
 
 # rebar 2.x
 .rebar
