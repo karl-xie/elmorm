@@ -122,7 +122,7 @@ collect_table_def([{col, Name, DataType, ColOptions} | T], Map) ->
         {error, Error} ->
             {error, Error}
     end;
-collect_table_def([{idx, NameAndType, IdxParts} | T], Map) ->
+collect_table_def([{idx, NameAndType, IdxParts, IdxOptions} | T], Map) ->
     #{idx_seq := IdxSeq, indexs := Indexs, cols := Cols, idx_name := IName} = Map,
     case proplists:get_value(name, NameAndType, undefined) of
     undefined -> 
@@ -135,14 +135,20 @@ collect_table_def([{idx, NameAndType, IdxParts} | T], Map) ->
     IdxType = proplists:get_value(type, NameAndType, undefined),
     case collect_index_parts(IdxParts, Cols) of
     {ok, Fields} ->
-        Index = #elm_index{
-            seq = IdxSeq,
-            name = Name,
-            class = normal,
-            index_type = IdxType,
-            fields = Fields
-        },
-        collect_table_def(T, Map#{idx_seq => IdxSeq + 1, indexs => [Index | Indexs], idx_name => NIName});
+        case collect_index_opts(IdxOptions) of
+        {ok, Options} ->
+            Index = #elm_index{
+                seq = IdxSeq,
+                name = Name,
+                class = normal,
+                index_type = IdxType,
+                fields = Fields,
+                options = Options
+            },
+            collect_table_def(T, Map#{idx_seq => IdxSeq + 1, indexs => [Index | Indexs], idx_name => NIName});
+        {error, Error} ->
+            {error, Error}
+        end;
     {error, Error} ->
         {error, Error}
     end;
@@ -266,3 +272,25 @@ collect_index_part([{Name, Len, Sort} | T], Cols, Seq, Result) ->
         },
         collect_index_part(T, Cols, Seq + 1, [E | Result])
     end.
+
+collect_index_opts(IdxOptions) ->
+    collect_index_opt(IdxOptions, ?INDEX_OPTS).
+collect_index_opt([], Opts) -> {ok, Opts};
+collect_index_opt([{key_block_size, Size} | T], Opts) when is_integer(Size) ->
+    collect_index_opt(T, Opts#{key_block_size => Size});
+collect_index_opt([{parser, Parser} | T], Opts) when is_list(Parser) ->
+    collect_index_opt(T, Opts#{parser => unicode:characters_to_binary(Parser)});
+collect_index_opt([{engine_attribute, EngineAttr} | T], Opts) when is_list(EngineAttr) ->
+    collect_index_opt(T, Opts#{engine_attribute => unicode:characters_to_binary(EngineAttr)});
+collect_index_opt([{secondary_engine_attribute, SecondaryEngineAttr} | T], Opts) when is_list(SecondaryEngineAttr) ->
+    collect_index_opt(T, Opts#{secondary_engine_attribute => unicode:characters_to_binary(SecondaryEngineAttr)});
+collect_index_opt([{visible, Visible} | T], Opts) ->
+    collect_index_opt(T, Opts#{visible => Visible});
+collect_index_opt([{invisible, InVisible} | T], Opts) ->
+    collect_index_opt(T, Opts#{invisible => InVisible});
+collect_index_opt([{using, IndexType} | T], Opts) ->
+    collect_index_opt(T, Opts#{using => IndexType});
+collect_index_opt([{comment, Comment} | T], Opts) when is_list(Comment) ->
+    collect_index_opt(T, Opts#{comment => unicode:characters_to_binary(Comment)});
+collect_index_opt([H | _], _Opts) ->
+    {error, {unrecognized_index_option, H}}.

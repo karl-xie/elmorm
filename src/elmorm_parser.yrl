@@ -131,7 +131,7 @@ k_idx_option -> secondary_engine_attribute '=' k_var : {secondary_engine_attribu
 k_idx_option -> secondary_engine_attribute k_var : {secondary_engine_attribute, '$2'}.
 k_idx_option -> using var : {using, unwrap('$2')}.
 k_idx_option -> visible : {visible, true}.
-k_idx_option -> invisible : {visible, false}.
+k_idx_option -> invisible : {invisible, true}.
 
 %% table options
 k_table_options -> '$empty' : [].
