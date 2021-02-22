@@ -31,59 +31,69 @@ hex_to_int([_, _ | R]) ->
     Int.
 
 keyword_or_var(TokenChars, TokenLine) ->
-    Atom = erlang:list_to_atom(string:to_lower(TokenChars)),
-    case is_keyword(Atom) of
-    true -> {Atom, TokenLine, {Atom, TokenChars}};
-    false -> {var, TokenLine, TokenChars}
+    LowerChars = string:to_lower(TokenChars),
+    case is_keyword(LowerChars) of
+    true ->
+        Atom = erlang:list_to_atom(LowerChars),
+        {Atom, TokenLine, {Atom, TokenChars}};
+    false -> 
+        {var, TokenLine, TokenChars}
     end.
 
-is_keyword(create) -> true;
-is_keyword(table) -> true;
-is_keyword('not') -> true;
-is_keyword(null) -> true;
-is_keyword(default) -> true;
-is_keyword(signed) -> true;
-is_keyword(unsigned) -> true;
-is_keyword(comment) -> true;
-is_keyword(charset) -> true;
-is_keyword(engine) -> true;
-is_keyword('if') -> true;
-is_keyword(character) -> true;
-is_keyword(set) -> true;
-is_keyword(codec) -> true;
-is_keyword(alias) -> true;
-is_keyword(constraint) -> true;
-is_keyword(primary) -> true;
-is_keyword(key) -> true;
-is_keyword(index) -> true;
-is_keyword(using) -> true;
-is_keyword(tinyint) -> true;
-is_keyword(smallint) -> true;
-is_keyword(mediumint) -> true;
-is_keyword(int) -> true;
-is_keyword(bigint) -> true;
-is_keyword(varchar) -> true;
-is_keyword(char) -> true;
-is_keyword(text) -> true;
-is_keyword(storage) -> true;
-is_keyword(collate) -> true;
-is_keyword(tinyblob) -> true;
-is_keyword(blob) -> true;
-is_keyword(mediumblob) -> true;
-is_keyword(longblob) -> true;
-is_keyword(drop) -> true;
-is_keyword(exists) -> true;
-is_keyword(names) -> true;
-is_keyword(global) -> true;
-is_keyword(session) -> true;
-is_keyword(local) -> true;
-is_keyword(auto_increment) -> true;
-is_keyword(unique) -> true;
-is_keyword(key_block_size) -> true;
-is_keyword(with) -> true;
-is_keyword(parser) -> true;
-is_keyword(visible) -> true;
-is_keyword(invisible) -> true;
-is_keyword(engine_attribute) -> true;
-is_keyword(secondary_engine_attribute) -> true;
+is_keyword("create") -> true;
+is_keyword("table") -> true;
+is_keyword("not") -> true;
+is_keyword("null") -> true;
+is_keyword("default") -> true;
+is_keyword("signed") -> true;
+is_keyword("unsigned") -> true;
+is_keyword("comment") -> true;
+is_keyword("charset") -> true;
+is_keyword("engine") -> true;
+is_keyword("if") -> true;
+is_keyword("character") -> true;
+is_keyword("set") -> true;
+is_keyword("codec") -> true;
+is_keyword("alias") -> true;
+is_keyword("constraint") -> true;
+is_keyword("primary") -> true;
+is_keyword("key") -> true;
+is_keyword("index") -> true;
+is_keyword("using") -> true;
+is_keyword("tinyint") -> true;
+is_keyword("smallint") -> true;
+is_keyword("mediumint") -> true;
+is_keyword("int") -> true;
+is_keyword("bigint") -> true;
+is_keyword("varchar") -> true;
+is_keyword("char") -> true;
+is_keyword("text") -> true;
+is_keyword("storage") -> true;
+is_keyword("collate") -> true;
+is_keyword("tinyblob") -> true;
+is_keyword("blob") -> true;
+is_keyword("mediumblob") -> true;
+is_keyword("longblob") -> true;
+is_keyword("drop") -> true;
+is_keyword("exists") -> true;
+is_keyword("names") -> true;
+is_keyword("global") -> true;
+is_keyword("session") -> true;
+is_keyword("local") -> true;
+is_keyword("auto_increment") -> true;
+is_keyword("unique") -> true;
+is_keyword("key_block_size") -> true;
+is_keyword("with") -> true;
+is_keyword("parser") -> true;
+is_keyword("visible") -> true;
+is_keyword("invisible") -> true;
+is_keyword("engine_attribute") -> true;
+is_keyword("secondary_engine_attribute") -> true;
+is_keyword("alter") -> true;
+is_keyword("add") -> true;
+is_keyword("modify") -> true;
+is_keyword("column") -> true;
+is_keyword("after") -> true;
+is_keyword("first") -> true;
+is_keyword("change") -> true;
 is_keyword(_) -> false.

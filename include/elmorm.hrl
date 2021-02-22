@@ -41,6 +41,14 @@
     index :: [#elm_index{}]
 }).
 
+-record(elm_alter, {
+    table :: binary(),
+    method :: atom(),
+    old_col_name :: binary(),
+    field :: #elm_field{} | binary(),
+    opt_seq :: atom()
+}).
+
 -define(TABLE_OPTS, #{
     charset => undefined,
     collate => undefined,

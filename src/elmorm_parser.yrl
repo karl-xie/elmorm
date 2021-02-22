@@ -10,6 +10,8 @@ k_create_defs k_create_def k_nn_create_defs k_col_def k_data_type k_data_type_in
 %% index define
     k_idx_def k_normal_idx_def k_primary_idx_def k_idx_type k_idx_parts k_idx_part k_idx_sort
     k_unique_idx_def k_idx_name_and_type k_idx_options k_idx_option
+%% alter define
+    k_alter_defs k_alter_operates k_alter_operate k_alter_seq
 
 k_names
 
@@ -20,7 +22,8 @@ Terminals ';' '=' ',' '(' ')' '.' string integer float var name
     tinyint smallint int mediumint bigint signed unsigned varchar char not null
     storage collate primary key index using tinyblob blob mediumblob longblob
     drop exists if names global local session qualifier text auto_increment unique
-    key_block_size with parser visible invisible engine_attribute secondary_engine_attribute.
+    key_block_size with parser visible invisible engine_attribute secondary_engine_attribute
+    alter add modify column after first change.
 
 Rootsymbol k_elmorm.
 
@@ -30,6 +33,7 @@ k_elmorm -> '$empty' : [].
 k_elmorm -> k_create_ddl k_elmorm : ['$1' | '$2'].
 k_elmorm -> k_drop_ddl k_elmorm : ['$1' | '$2'].
 k_elmorm -> k_set_dal k_elmorm : ['$1' | '$2'].
+k_elmorm -> k_alter_defs k_elmorm : ['$1' | '$2'].
 
 k_create_ddl -> create table k_name '(' k_create_defs ')' k_table_options ';' : {table, '$3', '$7', '$5'}.
 
@@ -167,6 +171,25 @@ k_set_dal -> set qualifier var '=' k_not_null_value ';' : {set, session, unwrap(
 k_set_dal -> set var '=' k_not_null_value ';' : {set, session, unwrap('$2'), '$4'}.
 k_set_dal -> set names var ';' : {set_charset, unwrap('$3'), default}.
 k_set_dal -> set names var collate var ';' : {set_charset, unwrap('$3'), unwrap('$5')}.
+
+%% alter statement
+k_alter_defs -> alter table k_name k_alter_operates : {alter, '$3', '$4'}.
+k_alter_operates -> k_alter_operate : ['$1'].
+k_alter_operates -> k_alter_operate ',' k_alter_operates : ['$1' | '$3'].
+
+k_alter_operate -> add column k_col_def k_alter_seq ';' : {add, '$3', '$6', '$7'}.
+k_alter_operate -> add k_col_def k_alter_seq ';' : {add, '$3', '$5', '$6'}.
+k_alter_operate -> drop column var ';' : {drop, '$3', '$6'}.
+k_alter_operate -> modify column k_col_def k_alter_seq ';' : {modify, '$3', '$6', '$7'}.
+k_alter_operate -> modify k_col_def k_alter_seq ';' : {modify, '$3', '$5', '$6'}.
+k_alter_operate -> change column k_name k_col_def k_alter_seq ';' : {change, '$3', '$6', '$7', '$8'}. 
+k_alter_operate -> change k_name k_col_def k_alter_seq ';' : {change, '$3', '$5', '$6', '$7'}.
+
+k_alter_seq -> '$empty' : undefined.
+k_alter_seq -> first : first.
+k_alter_seq -> after k_name : {'after', '$2'}.
+
+%% end of all statement
 
 k_names -> k_name : ['$1'].
 k_names -> k_name ',' k_names : ['$1' | '$3'].

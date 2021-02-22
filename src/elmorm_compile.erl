@@ -19,7 +19,12 @@ parse_binary(Binary) ->
     {ok, Tokens, _Line} ->
         case elmorm_parser:parse(Tokens) of
         {ok, Parsed} ->
-            collect_tables(Parsed);
+            case collect_tables(Parsed) of
+            {ok, Statements, Tables} ->
+                apply_other_statement(Statements, Tables);
+            {error, Error} ->
+                {error, Error}
+            end;
         {error, Error} ->
             {error, Error}
         end;
@@ -28,10 +33,10 @@ parse_binary(Binary) ->
     end.
 
 collect_tables(Parsed) ->
-    collect_table(Parsed, []).
+    collect_table(Parsed, [], []).
 
-collect_table([], Result) -> {ok, lists:reverse(Result)};
-collect_table([{table, Name, TableOpts, TableDefinds} | T], Result) ->
+collect_table([], Statements, Tables) -> {ok, lists:reverse(Statements), lists:reverse(Tables)};
+collect_table([{table, Name, TableOpts, TableDefinds} | T], Statements, Tables) ->
     case collect_table_opts(TableOpts) of
     {ok, Options} ->
         case collect_table_defs(TableDefinds) of
@@ -48,7 +53,7 @@ collect_table([{table, Name, TableOpts, TableDefinds} | T], Result) ->
                     primary_key = PrimaryL,
                     index = IndexL
                 },
-                collect_table(T, [Table | Result])
+                collect_table(T, Statements, [Table | Tables])
             end;
         {error, Error} ->
             {error, {Name, Error}}
@@ -56,14 +61,63 @@ collect_table([{table, Name, TableOpts, TableDefinds} | T], Result) ->
     {error, Error} ->
         {error, {Name, Error}}
     end;
-collect_table([{drop_table, _Names} | T], Result) ->
-    collect_table(T, Result);
-collect_table([{set, _Scope, _VarName, _Value} | T], Result) ->
-    collect_table(T, Result);
-collect_table([{set_charset, _Charset, _Collate} | T], Result) ->
-    collect_table(T, Result);
-collect_table([_ | T], Result) ->
-    collect_table(T, Result).
+collect_table([{alter, add, Name, ColDef, Seq} | T], Statements, Tables) ->
+    case collect_table_defs([ColDef]) of
+    {ok, [Column], [], []} ->
+        Alter = #elm_alter{
+            table = erlang:list_to_binary(Name),
+            method = add,
+            field = Column,
+            opt_seq = Seq
+        },
+        collect_table(T, [Alter | Statements], Tables);
+    {error, Error} ->
+        {error, {Name, Error}}
+    end;
+collect_table([{alter, modify, Name, ColDef, Seq} | T], Statements, Tables) ->
+    case collect_table_defs([ColDef]) of
+    {ok, [Column], [], []} ->
+        Alter = #elm_alter{
+            table = erlang:list_to_binary(Name),
+            method = modify,
+            old_col_name = Column#elm_field.name,
+            field = Column,
+            opt_seq = Seq
+        },
+        collect_table(T, [Alter | Statements], Tables);
+    {error, Error} ->
+        {error, {Name, Error}}
+    end;
+collect_table([{alter, change, Name, OldColName, ColDef, Seq} | T], Statements, Tables) ->
+    case collect_table_defs([ColDef]) of
+    {ok, [Column], [], []} ->
+        Alter = #elm_alter{
+            table = erlang:list_to_binary(Name),
+            method = change,
+            old_col_name = OldColName,
+            field = Column,
+            opt_seq = Seq
+        },
+        collect_table(T, [Alter | Statements], Tables);
+    {error, Error} ->
+        {error, {Name, Error}}
+    end;
+collect_table([{alter, drop, Name, ColName} | T], Statements, Tables) ->
+    Alter = #elm_alter{
+        table = erlang:list_to_binary(Name),
+        method = drop,
+        field = erlang:list_to_binary(ColName),
+        opt_seq = undefined
+    },
+    collect_table(T, [Alter | Statements], Tables);
+collect_table([{drop_table, _Names} | T], Statements, Tables) ->
+    collect_table(T, Statements, Tables);
+collect_table([{set, _Scope, _VarName, _Value} | T], Statements, Tables) ->
+    collect_table(T, Statements, Tables);
+collect_table([{set_charset, _Charset, _Collate} | T], Statements, Tables) ->
+    collect_table(T, Statements, Tables);
+collect_table([_ | T], Statements, Tables) ->
+    collect_table(T, Statements, Tables).
 
 collect_table_opts(TableOpts) ->
     collect_table_opt(TableOpts, ?TABLE_OPTS).
@@ -297,3 +351,217 @@ collect_index_opt([{comment, Comment} | T], Opts) when is_list(Comment) ->
     collect_index_opt(T, Opts#{comment => unicode:characters_to_binary(Comment)});
 collect_index_opt([H | _], _Opts) ->
     {error, {unrecognized_index_option, H}}.
+
+apply_other_statement([], Result) ->
+    {ok, Result};
+apply_other_statement([#elm_alter{} = H | T], Result) ->
+    #elm_alter{method = Method, table = TableName} = H,
+    case lists:keyfind(TableName, #elm_table.name, Result) of
+    #elm_table{fields = Fields} = ElmTable ->
+        case Method of
+        add ->
+            case insert_field(Fields, H) of
+            {ok, NFields} ->
+                NElmTable = ElmTable#elm_table{fields = NFields},
+                NResult = lists:keyreplace(TableName, #elm_table.name, Result, NElmTable),
+                apply_other_statement(T, NResult);
+            false ->
+                {error, {add_column_fail, TableName, H#elm_alter.field#elm_field.name}}
+            end;
+        modify ->
+            case modify_field(Fields, H) of
+            {ok, NFields} ->
+                NElmTable = ElmTable#elm_table{fields = NFields},
+                NResult = lists:keyreplace(TableName, #elm_table.name, Result, NElmTable),
+                apply_other_statement(T, NResult);
+            false ->
+                {error, {add_column_fail, TableName, H#elm_alter.field#elm_field.name}}
+            end;
+        change ->
+            case modify_field(Fields, H) of
+            {ok, NFields} ->
+                NElmTable = ElmTable#elm_table{fields = NFields},
+                NResult = lists:keyreplace(TableName, #elm_table.name, Result, NElmTable),
+                apply_other_statement(T, NResult);
+            false ->
+                {error, {add_column_fail, TableName, H#elm_alter.field#elm_field.name}}
+            end;
+        drop ->
+            case drop_field(Fields, H) of
+            {ok, NFields} ->
+                NElmTable = ElmTable#elm_table{fields = NFields},
+                NResult = lists:keyreplace(TableName, #elm_table.name, Result, NElmTable),
+                apply_other_statement(T, NResult);
+            false ->
+                {error, {drop_column_fail, TableName, H#elm_alter.field}}
+            end
+        end;
+    false ->
+        {error, {table_not_found, TableName}}
+    end;
+apply_other_statement([_ | T], Result) ->
+    apply_other_statement(T, Result).
+
+insert_field(Fields, H) ->
+    case H#elm_alter.opt_seq of
+    first ->
+        AField = H#elm_alter.field#elm_field{seq = 1, pre_col_name = undefined},
+        case Fields of
+        [OriFirst | T] ->
+            NOriFirst = OriFirst#elm_field{
+                seq = OriFirst#elm_field.seq + 1,
+                pre_col_name = AField#elm_field.name
+            },
+            {ok, [AField, NOriFirst | [X#elm_field{seq = X#elm_field.seq + 1} || X <- T]]};
+        [] ->
+            {ok, [AField]}
+        end;
+    undefined ->
+        case Fields of
+        [] ->
+            AField = H#elm_alter.field#elm_field{seq = 1, pre_col_name = undefined},
+            {ok, [AField]};
+        _ ->
+            PreCol = lists:last(Fields),
+            AField = H#elm_alter.field#elm_field{
+                seq = PreCol#elm_field.seq + 1,
+                pre_col_name = PreCol#elm_field.name
+            },
+            {ok, Fields ++ [AField]}
+        end;
+    {'after', Name} ->
+        case split_fields(Fields, Name, []) of
+        {ok, PreFields, PreCol, SufFields} ->
+            AField = H#elm_alter.field#elm_field{
+                seq = PreCol#elm_field.seq + 1,
+                pre_col_name = PreCol#elm_field.name
+            },
+            case SufFields of
+            [FirstSuff | T] ->
+                NFirstSuff = FirstSuff#elm_field{
+                    seq = FirstSuff#elm_field.seq + 1,
+                    pre_col_name = AField#elm_field.name
+                },
+                {ok, PreFields ++ [PreCol, AField, NFirstSuff | [X#elm_field{seq = X#elm_field.seq + 1} || X <- T]]};
+            [] ->
+                {ok, PreFields ++ [PreCol, AField]}
+            end;
+        false ->
+            false
+        end
+    end.
+
+modify_field(Fields, H) ->
+    case split_fields(Fields, H#elm_alter.old_col_name, []) of
+    {ok, PreFields, OldCol, SuffFields} ->
+        case H#elm_alter.opt_seq of
+        first ->
+            AField = H#elm_alter.field#elm_field{seq = 1, pre_col_name = undefined},
+            case SuffFields of
+            [FirstSuff | T] ->
+                NFirstSuff = FirstSuff#elm_field{pre_col_name = OldCol#elm_field.pre_col_name},
+                NPreFields = [X#elm_field{seq = X#elm_field.seq + 1} || X <- PreFields],
+                {ok, [AField | NPreFields] ++ [NFirstSuff | T]};
+            [] ->
+                NPreFields = [X#elm_field{seq = X#elm_field.seq + 1} || X <- PreFields],
+                {ok, [AField | NPreFields]}
+            end;
+        undefined ->
+            AField = H#elm_alter.field#elm_field{
+                seq = OldCol#elm_field.seq,
+                pre_col_name = OldCol#elm_field.pre_col_name
+            },
+            case SuffFields of
+            [FirstSuff | T] ->
+                NFirstSuff = FirstSuff#elm_field{pre_col_name = AField#elm_field.name},
+                {ok, PreFields ++ [AField, NFirstSuff | T]};
+            [] ->
+                {ok, PreFields ++ [AField]}
+            end;
+        {'after', Name} ->
+            case split_fields(PreFields, Name, []) of
+            {ok, PPreFields, PCol, PSuffFields} ->
+                AField = H#elm_alter.field#elm_field{
+                    seq = PCol#elm_field.seq + 1,
+                    pre_col_name = PCol#elm_field.name
+                },
+                case PSuffFields of
+                [PFirstSuff | T] ->
+                    NPFirstSuff = PFirstSuff#elm_field{
+                        seq = PFirstSuff#elm_field.seq + 1,
+                        pre_col_name = H#elm_alter.field#elm_field.name
+                    },
+                    NPSuffFields = [NPFirstSuff | [X#elm_field{seq = X#elm_field.seq + 1} || X <- T]],
+                    case SuffFields of
+                    [FirstSuff | T2] ->
+                        NFirstSuff = FirstSuff#elm_field{pre_col_name = OldCol#elm_field.pre_col_name},
+                        {ok, PPreFields ++ [PCol, AField | NPSuffFields] ++ [NFirstSuff | T2]};
+                    [] ->
+                        {ok, PPreFields ++ [PCol, AField | NPSuffFields]}
+                    end;
+                [] ->
+                    {ok, PPreFields ++ [PCol, AField]}
+                end;
+            false ->
+                case split_fields(SuffFields, Name, []) of
+                {ok, SPreFields, SCol, SSuffFields} ->
+                    AField = H#elm_alter.field#elm_field{
+                        seq = SCol#elm_field.seq,
+                        pre_col_name = SCol#elm_field.name
+                    },
+                    NSCol = SCol#elm_field{seq = SCol#elm_field.seq - 1},
+                    case SPreFields of
+                    [SFirstPre | T] ->
+                        NSFirstPre = SFirstPre#elm_field{
+                            seq = SFirstPre#elm_field.seq - 1,
+                            pre_col_name = OldCol#elm_field.pre_col_name
+                        },
+                        NSPreFields = [NSFirstPre | [X#elm_field{seq = X#elm_field.seq - 1} || X <- T]],
+                        case SSuffFields of
+                        [SSuffFirst | T2] ->
+                            NSSuffFirst = SSuffFirst#elm_field{pre_col_name = AField#elm_field.name},
+                            {ok, PreFields ++ NSPreFields ++ [NSCol, AField, NSSuffFirst | T2]};
+                        [] ->
+                            {ok, PreFields ++ NSPreFields ++ [NSCol, AField]}
+                        end;
+                    [] ->
+                        case SSuffFields of
+                        [SSuffFirst | T2] ->
+                            NSSuffFirst = SSuffFirst#elm_field{pre_col_name = AField#elm_field.name},
+                            {ok, PreFields ++ [NSCol, AField, NSSuffFirst | T2]};
+                        [] ->
+                            {ok, PreFields ++ [NSCol, AField]}
+                        end
+                    end;
+                false ->
+                    false
+                end
+            end
+        end;
+    false ->
+        false
+    end.
+
+drop_field(Fields, H) ->
+    case split_fields(Fields, H#elm_alter.field#elm_field.name, []) of
+    {ok, PreFields, OldCol, SuffFields} ->
+        case SuffFields of
+        [FirstSuff | T] ->
+            NFirstSuff = FirstSuff#elm_field{
+                seq = FirstSuff#elm_field.seq - 1,
+                pre_col_name = OldCol#elm_field.pre_col_name
+            },
+            {ok, PreFields ++ [NFirstSuff | [X#elm_field{seq = X#elm_field.seq - 1} || X <- T]]};
+        [] ->
+            {ok, PreFields}
+        end;
+    false ->
+        false
+    end.
+
+split_fields([], _Name, _PreFields) -> false;
+split_fields([#elm_field{name = Name} = H | T], Name, PreFields) ->
+    {ok, lists:reverse(PreFields), H, T};
+split_fields([H | T], Name, PreFields) ->
+    split_fields(T, Name, [H | PreFields]).
+
