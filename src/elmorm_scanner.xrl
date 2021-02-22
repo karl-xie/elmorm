@@ -59,6 +59,7 @@ is_keyword(index) -> true;
 is_keyword(using) -> true;
 is_keyword(tinyint) -> true;
 is_keyword(smallint) -> true;
+is_keyword(mediumint) -> true;
 is_keyword(int) -> true;
 is_keyword(bigint) -> true;
 is_keyword(varchar) -> true;

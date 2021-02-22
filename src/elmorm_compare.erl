@@ -261,7 +261,7 @@ format_table_index(#elm_index{class = normal} = H) ->
     undefined -> L1;
     IndexName -> [" `", IndexName, "`" | L1]
     end,
-    iolist_to_binary(["INDEX" | L2]);
+    iolist_to_binary([["INDEX" | L2], format_index_options(H#elm_index.options)]);
 format_table_index(#elm_index{class = unique} = H) ->
     L0 = [" ", format_key_parts(H#elm_index.fields)],
     L1 =
@@ -274,7 +274,68 @@ format_table_index(#elm_index{class = unique} = H) ->
     undefined -> L1;
     IndexName -> [" `", IndexName, "`" | L1]
     end,
-    iolist_to_binary(["UNIQUE KEY" | L2]).
+    iolist_to_binary([["UNIQUE KEY" | L2], format_index_options(H#elm_index.options)]).
+
+format_index_options(Options) ->
+    iolist_to_binary(format_index_options(?INDEX_OPTS_SEQ, Options, [])).
+
+format_index_options([], _Options, R) -> lists:reverse(R);
+format_index_options([key_block_size | T], Options, R) ->
+    case maps:get(key_block_size, Options) of
+    undefined -> format_index_options(T, Options, R);
+    Value ->
+        NewR = [<<" ", (maps:get(key_block_size, ?INDEX_OPTS_SNAME))/binary, " = ", (format_option_value(Value))/binary>> | R],
+        format_index_options(T, Options, NewR)
+    end;
+format_index_options([parser | T], Options, R) ->
+    case maps:get(parser, Options) of
+    undefined -> format_index_options(T, Options, R);
+    Value ->
+        NewR = [<<" ", (maps:get(parser, ?INDEX_OPTS_SNAME))/binary, " ", (format_option_value(Value))/binary>> | R],
+        format_index_options(T, Options, NewR)
+    end;
+format_index_options([engine_attribute | T], Options, R) ->
+    case maps:get(engine_attribute, Options) of
+    undefined -> format_index_options(T, Options, R);
+    Value ->
+        NewR = [<<" ", (maps:get(engine_attribute, ?INDEX_OPTS_SNAME))/binary, " ", (format_option_value(Value))/binary>> | R],
+        format_index_options(T, Options, NewR)
+    end;
+format_index_options([secondary_engine_attribute | T], Options, R) ->
+    case maps:get(secondary_engine_attribute, Options) of
+    undefined -> format_index_options(T, Options, R);
+    Value ->
+        NewR = [<<" ", (maps:get(secondary_engine_attribute, ?INDEX_OPTS_SNAME))/binary, " ", (format_option_value(Value))/binary>> | R],
+        format_index_options(T, Options, NewR)
+    end;
+format_index_options([visible | T], Options, R) ->
+    case maps:get(visible, Options) of
+    undefined -> format_index_options(T, Options, R);
+    true ->
+        NewR = [<<" ", (maps:get(visible, ?INDEX_OPTS_SNAME))/binary>> | R],
+        format_index_options(T, Options, NewR)
+    end;
+format_index_options([invisible | T], Options, R) ->
+    case maps:get(invisible, Options) of
+    undefined -> format_index_options(T, Options, R);
+    true ->
+        NewR = [<<" ", (maps:get(invisible, ?INDEX_OPTS_SNAME))/binary>> | R],
+        format_index_options(T, Options, NewR)
+    end;
+format_index_options([using | T], Options, R) ->
+    case maps:get(using, Options) of
+    undefined -> format_index_options(T, Options, R);
+    Value ->
+        NewR = [<<" ", (maps:get(using, ?INDEX_OPTS_SNAME))/binary, " ", (format_option_value(Value))/binary>> | R],
+        format_index_options(T, Options, NewR)
+    end;
+format_index_options([comment | T], Options, R) ->
+    case maps:get(comment, Options) of
+    undefined -> format_index_options(T, Options, R);
+    Value ->
+        NewR = [<<" ", (maps:get(comment, ?INDEX_OPTS_SNAME))/binary, " ", (format_option_value(Value))/binary>> | R],
+        format_index_options(T, Options, NewR)
+    end.
 %% end of index
 
 %% begin of table define

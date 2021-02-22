@@ -70,6 +70,8 @@ collect_table_opts(TableOpts) ->
 collect_table_opt([], Opts) -> {ok, Opts};
 collect_table_opt([{charset, Charset} | T], Opts) ->
     collect_table_opt(T, Opts#{charset => Charset});
+collect_table_opt([{collate, Collate} | T], Opts) ->
+    collect_table_opt(T, Opts#{collate => Collate});
 collect_table_opt([{engine, Engine} | T], Opts) ->
     collect_table_opt(T, Opts#{engine => Engine});
 collect_table_opt([{comment, Comment} | T], Opts) when is_list(Comment) ->
@@ -221,6 +223,7 @@ calc_index_name(FCN, Num, M) ->
 
 decode_data_type({tinyint, Len, Signed}) -> {ok, {tinyint, Len, undefined, Signed}};
 decode_data_type({smallint, Len, Signed}) -> {ok, {smallint, Len, undefined, Signed}};
+decode_data_type({mediumint, Len, Signed}) -> {ok, {mediumint, Len, undefined, Signed}};
 decode_data_type({int, Len, Signed}) -> {ok, {int, Len, undefined, Signed}};
 decode_data_type({bigint, Len, Signed}) -> {ok, {bigint, Len, undefined, Signed}};
 decode_data_type({varchar, Len, Charset}) -> {ok, {varchar, Len, Charset, undefined}};

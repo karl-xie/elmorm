@@ -17,7 +17,7 @@ k_var.
 
 Terminals ';' '=' ',' '(' ')' '.' string integer float var name
     create table default charset character set engine comment alias codec
-    tinyint smallint int bigint signed unsigned varchar char not null
+    tinyint smallint int mediumint bigint signed unsigned varchar char not null
     storage collate primary key index using tinyblob blob mediumblob longblob
     drop exists if names global local session qualifier text auto_increment unique
     key_block_size with parser visible invisible engine_attribute secondary_engine_attribute.
@@ -54,6 +54,7 @@ k_data_type -> k_data_type_blob : '$1'.
 
 k_data_type_int -> tinyint k_data_type_len k_data_type_is_signed : {tinyint, '$2', '$3'}.
 k_data_type_int -> smallint k_data_type_len k_data_type_is_signed : {smallint, '$2', '$3'}.
+k_data_type_int -> mediumint k_data_type_len k_data_type_is_signed : {mediumint, '$2', '$3'}.
 k_data_type_int -> int k_data_type_len k_data_type_is_signed : {int, '$2', '$3'}.
 k_data_type_int -> bigint k_data_type_len k_data_type_is_signed : {bigint, '$2', '$3'}.
 
@@ -135,6 +136,7 @@ k_idx_option -> invisible : {invisible, true}.
 
 %% table options
 k_table_options -> '$empty' : [].
+k_table_options -> k_table_option : ['$1'].
 k_table_options -> k_table_option k_table_nn_options : ['$1' | '$2'].
 k_table_options -> k_table_option ',' k_table_nn_options : ['$1' | '$3'].
 
@@ -144,6 +146,7 @@ k_table_nn_options -> k_table_option ',' k_table_nn_options : ['$1' | '$3'].
 
 k_table_option -> default character set '=' k_var : {charset, '$5'}.
 k_table_option -> default charset '=' k_var : {charset, '$4'}.
+k_table_option -> collate '=' k_var : {charset, '$3'}.
 k_table_option -> engine '=' k_var : {engine, '$3'}.
 k_table_option -> comment '=' k_var : {comment, '$3'}.
 k_table_option -> alias '=' k_var : {alias, '$3'}.

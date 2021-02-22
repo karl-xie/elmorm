@@ -43,6 +43,7 @@
 
 -define(TABLE_OPTS, #{
     charset => undefined,
+    collate => undefined,
     engine => undefined,
     comment => undefined,
     alias => undefined,
@@ -50,11 +51,12 @@
     auto_increment => undefined
 }).
 
--define(TABLE_OPTS_SEQ, [engine, charset, auto_increment, comment]).
+-define(TABLE_OPTS_SEQ, [engine, charset, collate, auto_increment, comment]).
 
 -define(TABLE_OPTS_SNAME, #{
     engine => <<"ENGINE">>,
     charset => <<"DEFAULT CHARACTER SET">>,
+    collate => <<"COLLATE">>,
     comment => <<"COMMENT">>,
     auto_increment => <<"AUTO_INCREMENT">>
 }).
