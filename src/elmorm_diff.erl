@@ -39,12 +39,12 @@ calc_table_options(TableA, TableB) ->
 %% get the operates of transform A to B
 calc_column_operate(TableA, TableB) ->
     #elm_table{fields = FieldsA0} = TableA,
-    #elm_table{fields = FieldsB0} = TableB,
+    #elm_table{fields = FieldsB0, options = TabOptions} = TableB,
     FieldsA = [X#elm_field{seq = 0} || X <- FieldsA0],
     FieldsB = [X#elm_field{seq = 0} || X <- FieldsB0],
     {ok, Drops, RestFieldsA} = drop_columns(FieldsA, FieldsB),
     {ok, Adds} = add_columns(RestFieldsA, FieldsB),
-    {ok, Modifys} = modify_columns(RestFieldsA, FieldsB, Adds),
+    {ok, Modifys} = modify_columns(RestFieldsA, FieldsB, Adds, TabOptions),
     {ok, Drops, Adds, Modifys}.
 
 drop_columns(FieldsA, FieldsB) ->
@@ -69,7 +69,7 @@ add_columns([H | T], FieldsA, Add) ->
     false -> add_columns(T, FieldsA, [H | Add])
     end.
 
-modify_columns(FieldsA, FieldsB, Add) ->
+modify_columns(FieldsA, FieldsB, Add, TabOptions) ->
     case modify_columns_insert(Add, FieldsA) of
     {ok, FieldsA1} ->
         F = fun(X, InAcc) ->
@@ -79,7 +79,7 @@ modify_columns(FieldsA, FieldsB, Add) ->
         DLB = lists:foldl(F, elmorm_dlink:empty(), FieldsB),
         Standard = init_standard(FieldsB),
         InitScore = calc_score(DLA, Standard),
-        {ok, modify_columns_loop(FieldsB, FieldsA1, elmorm_dlink:head(DLA), DLA, DLB, InitScore, Standard, [])};
+        {ok, modify_columns_loop(FieldsB, FieldsA1, elmorm_dlink:head(DLA), DLA, DLB, InitScore, Standard, TabOptions, [])};
     {error, Error} ->
         {error, Error}
     end.
@@ -93,27 +93,27 @@ modify_columns_insert([Field | T], Result) ->
         {error, Error}
     end.
 
-modify_columns_loop(FieldsB, FieldsA, _Cur, _DLA, _DLB, 0, _Standard, R) ->
+modify_columns_loop(FieldsB, FieldsA, _Cur, _DLA, _DLB, 0, _Standard, TabOptions, R) ->
     NewR = 
     lists:foldl(fun(X, InAcc) ->
         Old = lists:keyfind(X#elm_field.name, #elm_field.name, FieldsA),
-        case is_column_same(Old, X) of
+        case is_column_same(Old, X, TabOptions) of
         true -> InAcc;
         false -> [X | InAcc]
         end
     end, R, FieldsB),
     lists:reverse(NewR);
-modify_columns_loop([#elm_field{name = Cur} = H | T], FieldsA, Cur, DLA, DLB, Score, Standard, R) ->
+modify_columns_loop([#elm_field{name = Cur} = H | T], FieldsA, Cur, DLA, DLB, Score, Standard, TabOptions, R) ->
     OldH = lists:keyfind(Cur, #elm_field.name, FieldsA),
-    case is_column_same(OldH, H) of
+    case is_column_same(OldH, H, TabOptions) of
     true ->
         {ok, Next} = elmorm_dlink:next(Cur, DLA),
-        modify_columns_loop(T, FieldsA, Next, DLA, DLB, Score, Standard, R);
+        modify_columns_loop(T, FieldsA, Next, DLA, DLB, Score, Standard, TabOptions, R);
     false ->
         {ok, Next} = elmorm_dlink:next(Cur, DLA),
-        modify_columns_loop(T, FieldsA, Next, DLA, DLB, Score, Standard, [H | R])
+        modify_columns_loop(T, FieldsA, Next, DLA, DLB, Score, Standard, TabOptions, [H | R])
     end;
-modify_columns_loop([H | T], FieldsA, Cur, DLA, DLB, _Score, Standard, R) ->
+modify_columns_loop([H | T], FieldsA, Cur, DLA, DLB, _Score, Standard, TabOptions, R) ->
     #elm_field{name = Name, pre_col_name = PreColName} = H,
     %% op-1 move H to here
     DLA_OP1_1 = elmorm_dlink:delete(Name, DLA),
@@ -130,9 +130,9 @@ modify_columns_loop([H | T], FieldsA, Cur, DLA, DLB, _Score, Standard, R) ->
     case Score_OP1 =< Score_OP2 of
     true -> %% use op-1
         {ok, NewCur} = elmorm_dlink:next(Name, DLA_OP1_2),
-        modify_columns_loop(T, FieldsA, NewCur, DLA_OP1_2, DLB, Score_OP1, Standard, [H | R]);
+        modify_columns_loop(T, FieldsA, NewCur, DLA_OP1_2, DLB, Score_OP1, Standard, TabOptions, [H | R]);
     false -> %% use op-2
-        modify_columns_loop([H | T], FieldsA, Next_OP2, DLA_OP2_2, DLB, Score_OP2, Standard, [CurFieldOP2 | R])
+        modify_columns_loop([H | T], FieldsA, Next_OP2, DLA_OP2_2, DLB, Score_OP2, Standard, TabOptions, [CurFieldOP2 | R])
     end.
 
 init_standard(Fields) ->
@@ -185,7 +185,7 @@ diff_index(IndexLA, IndexLB) ->
     Add = IndexLB -- IndexLA,
     {ok, Remove, Add}.
 
-is_column_same(ColA, ColB) ->
+is_column_same(ColA, ColB, TabOptions) ->
     ColA2 = ColA#elm_field{
         seq = 0,
         pre_col_name = <<>>,
@@ -198,7 +198,7 @@ is_column_same(ColA, ColB) ->
                 false -> undefined
                 end
             end,
-        options = unify_options(ColA#elm_field.options)
+        options = unify_options(ColA#elm_field.options, TabOptions)
     },
     ColB2 = ColB#elm_field{
         seq = 0,
@@ -212,11 +212,11 @@ is_column_same(ColA, ColB) ->
                 false -> undefined
                 end
             end,
-        options = unify_options(ColB#elm_field.options)
+        options = unify_options(ColB#elm_field.options, TabOptions)
     },
     ColA2 =:= ColB2.
 
-unify_options(Options) ->
+unify_options(Options, TabOptions) ->
     Options1 = 
         case maps:get(default, Options) of
         <<"NULL">> -> Options#{default => undefined};
@@ -232,4 +232,9 @@ unify_options(Options) ->
         undefined -> Options2#{comment => <<>>};
         _ -> Options2
         end,
-    Options3.
+    Options4 =
+        case maps:get(charset, Options3) =:= maps:get(charset, TabOptions) of
+        true -> Options3#{charset => undefined};
+        _ -> Options3
+        end,
+    Options4.
