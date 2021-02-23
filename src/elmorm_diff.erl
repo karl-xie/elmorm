@@ -197,6 +197,11 @@ is_column_same(ColA, ColB) ->
                 {ok, ALen} -> ALen;
                 false -> undefined
                 end
+            end,
+        options = 
+            case maps:get(default, ColA#elm_field.options) of
+            <<"NULL">> -> (ColA#elm_field.options)#{default => undefined};
+            _ -> ColA#elm_field.options
             end
     },
     ColB2 = ColB#elm_field{
@@ -210,6 +215,11 @@ is_column_same(ColA, ColB) ->
                 {ok, BLen} -> BLen;
                 false -> undefined
                 end
+            end,
+        options = 
+            case maps:get(default, ColB#elm_field.options) of
+            <<"NULL">> -> (ColB#elm_field.options)#{default => undefined};
+            _ -> ColB#elm_field.options
             end
     },
     ColA2 =:= ColB2.
