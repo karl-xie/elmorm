@@ -291,8 +291,8 @@ decode_data_type({smallint, Len, Signed}) -> {ok, {smallint, Len, undefined, Sig
 decode_data_type({mediumint, Len, Signed}) -> {ok, {mediumint, Len, undefined, Signed}};
 decode_data_type({int, Len, Signed}) -> {ok, {int, Len, undefined, Signed}};
 decode_data_type({bigint, Len, Signed}) -> {ok, {bigint, Len, undefined, Signed}};
-decode_data_type({varchar, Len, Charset}) -> {ok, {varchar, Len, string:to_lower(Charset), undefined}};
-decode_data_type({char, Len, Charset}) -> {ok, {char, Len, string:to_lower(Charset), undefined}};
+decode_data_type({varchar, Len, Charset}) -> {ok, {varchar, Len, Charset, undefined}};
+decode_data_type({char, Len, Charset}) -> {ok, {char, Len, Charset, undefined}};
 decode_data_type(tinyblob) -> {ok, {tinyblob, undefined, undefined, undefined}};
 decode_data_type(blob) -> {ok, {blob, undefined, undefined, undefined}};
 decode_data_type(mediumblob) -> {ok, {mediumblob, undefined, undefined, undefined}};

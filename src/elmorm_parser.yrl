@@ -73,7 +73,7 @@ k_data_type_blob -> mediumblob : mediumblob.
 k_data_type_blob -> longblob : longblob.
 
 k_data_type_charset -> '$empty' : undefined.
-k_data_type_charset -> character set var : unwrap('$3').
+k_data_type_charset -> character set var : string:to_lower(unwrap('$3')).
 
 k_data_type_len -> '$empty' : undefined.
 k_data_type_len -> '(' integer ')' : unwrap('$2').
