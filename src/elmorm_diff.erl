@@ -227,4 +227,9 @@ unify_options(Options) ->
         false -> Options1;
         _ -> Options1#{null => true}
         end,
-    Options2.
+    Options3 =
+        case maps:get(comment, Options2) of
+        undefined -> Options2#{comment => <<>>};
+        _ -> Options2
+        end,
+    Options3.
