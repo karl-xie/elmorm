@@ -198,7 +198,12 @@ is_column_same(ColA, ColB, TabOptions) ->
                 false -> undefined
                 end
             end,
-        options = unify_options(ColA#elm_field.options, TabOptions)
+        charset = 
+            case ColA#elm_field.charset =:= maps:get(charset, TabOptions) of
+            true -> undefined;
+            _ -> ColA#elm_field.charset
+            end,
+        options = unify_options(ColA#elm_field.options)
     },
     ColB2 = ColB#elm_field{
         seq = 0,
@@ -212,11 +217,16 @@ is_column_same(ColA, ColB, TabOptions) ->
                 false -> undefined
                 end
             end,
-        options = unify_options(ColB#elm_field.options, TabOptions)
+        charset = 
+            case ColB#elm_field.charset =:= maps:get(charset, TabOptions) of
+            true -> undefined;
+            _ -> ColB#elm_field.charset
+            end,
+        options = unify_options(ColB#elm_field.options)
     },
     ColA2 =:= ColB2.
 
-unify_options(Options, TabOptions) ->
+unify_options(Options) ->
     Options1 = 
         case maps:get(default, Options) of
         <<"NULL">> -> Options#{default => undefined};
@@ -232,9 +242,4 @@ unify_options(Options, TabOptions) ->
         undefined -> Options2#{comment => <<>>};
         _ -> Options2
         end,
-    Options4 =
-        case maps:get(charset, Options3) =:= maps:get(charset, TabOptions) of
-        true -> Options3#{charset => undefined};
-        _ -> Options3
-        end,
-    Options4.
+    Options3.
