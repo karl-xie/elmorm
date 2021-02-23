@@ -616,7 +616,13 @@ fix_type_options(DType, Options) when DType =:= tinyint; DType =:= smallint;
         true ->  Options#{default => "NULL"};
         _ -> Options
         end;
-    _ -> Options
+    Value when is_integer(Value) ->
+        Options;
+    Value when is_binary(Value) ->
+        case << <<X>> || <<X:8>> <= Value, X >= $0, X =< $9 >> of
+            Value -> Options#{default => erlang:binary_to_integer(Value)};
+            _ -> Options
+        end
     end;
 fix_type_options(_, Options) ->
     Options.
