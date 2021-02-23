@@ -2,7 +2,7 @@
 -define(ELMORM_H_H, true).
 
 -define(NEWLINE, <<"\n">>).
--define(TAB, <<"    ">>).
+-define(TAB, <<"  ">>).
 -define(DEFAULT_OPTIONS, #{newline => ?NEWLINE, tab => ?TAB}).
 
 -record(elm_index_field, {
@@ -26,7 +26,7 @@
     seq :: integer(),
     name :: binary(),
     pre_col_name :: binary() | undefined,
-    data_type :: binary(),
+    data_type :: atom(),
     data_len :: integer(),
     charset :: binary(),
     is_signed :: boolean(),
@@ -41,18 +41,22 @@
     index :: [#elm_index{}]
 }).
 
--record(elm_alter, {
-    table :: binary(),
+-record(elm_alter_op, {
     method :: atom(),
     old_col_name :: binary(),
-    field :: #elm_field{} | binary(),
+    field :: #elm_field{} | undefined,
     opt_seq :: atom()
+}).
+
+-record(elm_alter, {
+    table :: binary(),
+    op_list :: [#elm_alter_op{}]
 }).
 
 -define(TABLE_OPTS, #{
     charset => undefined,
     collate => undefined,
-    engine => undefined,
+    engine => "InnoDB",
     comment => undefined,
     alias => undefined,
     codec => undefined,
@@ -63,7 +67,7 @@
 
 -define(TABLE_OPTS_SNAME, #{
     engine => <<"ENGINE">>,
-    charset => <<"DEFAULT CHARACTER SET">>,
+    charset => <<"DEFAULT CHARSET">>,
     collate => <<"COLLATE">>,
     comment => <<"COMMENT">>,
     auto_increment => <<"AUTO_INCREMENT">>

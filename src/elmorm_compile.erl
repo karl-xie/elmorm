@@ -61,55 +61,17 @@ collect_table([{table, Name, TableOpts, TableDefinds} | T], Statements, Tables) 
     {error, Error} ->
         {error, {Name, Error}}
     end;
-collect_table([{alter, add, Name, ColDef, Seq} | T], Statements, Tables) ->
-    case collect_table_defs([ColDef]) of
-    {ok, [Column], [], []} ->
-        Alter = #elm_alter{
+collect_table([{alter, Name, Operates} | T], Statements, Tables) ->
+    case collect_alter_def(Operates, Name, []) of
+    {ok, SubOper} ->
+        Stat = #elm_alter{
             table = erlang:list_to_binary(Name),
-            method = add,
-            field = Column,
-            opt_seq = Seq
+            op_list = SubOper
         },
-        collect_table(T, [Alter | Statements], Tables);
+        collect_table(T, [Stat | Statements], Tables);
     {error, Error} ->
-        {error, {Name, Error}}
+        {error, Error}
     end;
-collect_table([{alter, modify, Name, ColDef, Seq} | T], Statements, Tables) ->
-    case collect_table_defs([ColDef]) of
-    {ok, [Column], [], []} ->
-        Alter = #elm_alter{
-            table = erlang:list_to_binary(Name),
-            method = modify,
-            old_col_name = Column#elm_field.name,
-            field = Column,
-            opt_seq = Seq
-        },
-        collect_table(T, [Alter | Statements], Tables);
-    {error, Error} ->
-        {error, {Name, Error}}
-    end;
-collect_table([{alter, change, Name, OldColName, ColDef, Seq} | T], Statements, Tables) ->
-    case collect_table_defs([ColDef]) of
-    {ok, [Column], [], []} ->
-        Alter = #elm_alter{
-            table = erlang:list_to_binary(Name),
-            method = change,
-            old_col_name = OldColName,
-            field = Column,
-            opt_seq = Seq
-        },
-        collect_table(T, [Alter | Statements], Tables);
-    {error, Error} ->
-        {error, {Name, Error}}
-    end;
-collect_table([{alter, drop, Name, ColName} | T], Statements, Tables) ->
-    Alter = #elm_alter{
-        table = erlang:list_to_binary(Name),
-        method = drop,
-        field = erlang:list_to_binary(ColName),
-        opt_seq = undefined
-    },
-    collect_table(T, [Alter | Statements], Tables);
 collect_table([{drop_table, _Names} | T], Statements, Tables) ->
     collect_table(T, Statements, Tables);
 collect_table([{set, _Scope, _VarName, _Value} | T], Statements, Tables) ->
@@ -250,6 +212,53 @@ collect_table_def([{unique_idx, NameAndType, IdxParts} | T], Map) ->
 collect_table_def([H | _], _Map) ->
     {error, {unrecognized_table_defind, H}}.
 
+collect_alter_def([], _Name, Operates) -> {ok, lists:reverse(Operates)};
+collect_alter_def([{add, ColDef, Seq} | T], Name, Operates) ->
+    case collect_table_defs([ColDef]) of
+    {ok, [Column], [], []} ->
+        Op = #elm_alter_op{
+            method = add,
+            field = Column,
+            opt_seq = Seq
+        },
+        collect_alter_def(T, Name, [Op | Operates]);
+    {error, Error} ->
+        {error, {Name, Error}}
+    end;
+collect_alter_def([{modify, ColDef, Seq} | T], Name, Operates) ->
+    case collect_table_defs([ColDef]) of
+    {ok, [Column], [], []} ->
+        Op = #elm_alter_op{
+            method = modify,
+            old_col_name = Column#elm_field.name,
+            field = Column,
+            opt_seq = Seq
+        },
+        collect_alter_def(T, Name, [Op | Operates]);
+    {error, Error} ->
+        {error, {Name, Error}}
+    end;
+collect_alter_def([{change, OldColName, ColDef, Seq} | T], Name, Operates) ->
+    case collect_table_defs([ColDef]) of
+    {ok, [Column], [], []} ->
+        Op = #elm_alter_op{
+            method = change,
+            old_col_name = OldColName,
+            field = Column,
+            opt_seq = Seq
+        },
+        collect_alter_def(T, Name, [Op | Operates]);
+    {error, Error} ->
+        {error, {Name, Error}}
+    end;
+collect_alter_def([{drop, ColName} | T], Name, Operates) ->
+    Op = #elm_alter_op{
+        method = drop,
+        old_col_name = erlang:list_to_binary(ColName),
+        opt_seq = undefined
+    },
+    collect_alter_def(T, Name, [Op | Operates]).
+
 pretreat_index_name(Indexs, NameMap) ->
     pretreat_index_name(Indexs, NameMap, []).
 pretreat_index_name([], _NameMap, R) -> lists:reverse(R);
@@ -355,57 +364,79 @@ collect_index_opt([H | _], _Opts) ->
 apply_other_statement([], Result) ->
     {ok, Result};
 apply_other_statement([#elm_alter{} = H | T], Result) ->
-    #elm_alter{method = Method, table = TableName} = H,
-    case lists:keyfind(TableName, #elm_table.name, Result) of
-    #elm_table{fields = Fields} = ElmTable ->
-        case Method of
-        add ->
-            case insert_field(Fields, H) of
-            {ok, NFields} ->
-                NElmTable = ElmTable#elm_table{fields = NFields},
-                NResult = lists:keyreplace(TableName, #elm_table.name, Result, NElmTable),
-                apply_other_statement(T, NResult);
-            false ->
-                {error, {add_column_fail, TableName, H#elm_alter.field#elm_field.name}}
-            end;
-        modify ->
-            case modify_field(Fields, H) of
-            {ok, NFields} ->
-                NElmTable = ElmTable#elm_table{fields = NFields},
-                NResult = lists:keyreplace(TableName, #elm_table.name, Result, NElmTable),
-                apply_other_statement(T, NResult);
-            false ->
-                {error, {add_column_fail, TableName, H#elm_alter.field#elm_field.name}}
-            end;
-        change ->
-            case modify_field(Fields, H) of
-            {ok, NFields} ->
-                NElmTable = ElmTable#elm_table{fields = NFields},
-                NResult = lists:keyreplace(TableName, #elm_table.name, Result, NElmTable),
-                apply_other_statement(T, NResult);
-            false ->
-                {error, {add_column_fail, TableName, H#elm_alter.field#elm_field.name}}
-            end;
-        drop ->
-            case drop_field(Fields, H) of
-            {ok, NFields} ->
-                NElmTable = ElmTable#elm_table{fields = NFields},
-                NResult = lists:keyreplace(TableName, #elm_table.name, Result, NElmTable),
-                apply_other_statement(T, NResult);
-            false ->
-                {error, {drop_column_fail, TableName, H#elm_alter.field}}
-            end
-        end;
-    false ->
-        {error, {table_not_found, TableName}}
+    case apply_alter(H, Result) of
+    {ok, NResult} ->
+        apply_other_statement(T, NResult);
+    {error, Error} ->
+        {error, Error}
     end;
 apply_other_statement([_ | T], Result) ->
     apply_other_statement(T, Result).
 
+apply_alter(Alter, Tables) ->
+    #elm_alter{table = TableName, op_list = OpList} = Alter,
+    case lists:keyfind(TableName, #elm_table.name, Tables) of
+    #elm_table{} = ElmTable ->
+        case apply_alter_op_loop(OpList, ElmTable) of
+        {ok, NElmTable} ->
+            NTables = lists:keyreplace(TableName, #elm_table.name, Tables, NElmTable),
+            {ok, NTables};
+        {error, Error} ->
+            {error, Error}
+        end;
+    false ->
+        {error, {table_not_found, TableName}}
+    end.
+
+apply_alter_op_loop([], ElmTable) -> {ok, ElmTable};
+apply_alter_op_loop([#elm_alter_op{method = add} = Op | T], ElmTable) ->
+    #elm_table{name = TableName, fields = Fields} = ElmTable,
+    case insert_field(Fields, Op) of
+    {ok, NFields} ->
+        NElmTable = ElmTable#elm_table{fields = NFields},
+        apply_alter_op_loop(T, NElmTable);
+    false ->
+        io:format("11111111 ElmTable is ~p~n", [ElmTable]),
+        io:format("11111111 Op is ~p~n", [Op]),
+        {error, {add_column_fail, TableName, Op#elm_alter_op.field#elm_field.name}}
+    end;
+apply_alter_op_loop([#elm_alter_op{method = modify} = Op | T], ElmTable) ->
+    #elm_table{name = TableName, fields = Fields} = ElmTable,
+    case modify_field(Fields, Op) of
+    {ok, NFields} ->
+        NElmTable = ElmTable#elm_table{fields = NFields},
+        apply_alter_op_loop(T, NElmTable);
+    false ->
+        io:format("22222222 ElmTable is ~p~n", [ElmTable]),
+        io:format("22222222 Op is ~p~n", [Op]),
+        {error, {modify_column_fail, TableName, Op#elm_alter_op.field#elm_field.name}}
+    end;
+apply_alter_op_loop([#elm_alter_op{method = change} = Op | T], ElmTable) ->
+    #elm_table{name = TableName, fields = Fields} = ElmTable,
+    case modify_field(Fields, Op) of
+    {ok, NFields} ->
+        NElmTable = ElmTable#elm_table{fields = NFields},
+        apply_alter_op_loop(T, NElmTable);
+    false ->
+        io:format("33333333 ElmTable is ~p~n", [ElmTable]),
+        io:format("33333333 Op is ~p~n", [Op]),
+        {error, {change_column_fail, TableName, Op#elm_alter_op.field#elm_field.name}}
+    end;
+apply_alter_op_loop([#elm_alter_op{method = drop} = Op | T], ElmTable) ->
+    #elm_table{name = TableName, fields = Fields} = ElmTable,
+    case drop_field(Fields, Op) of
+    {ok, NFields} ->
+        NElmTable = ElmTable#elm_table{fields = NFields},
+        apply_alter_op_loop(T, NElmTable);
+    false ->
+        {error, {drop_column_fail, TableName, Op#elm_alter_op.old_col_name}}
+    end.
+
+
 insert_field(Fields, H) ->
-    case H#elm_alter.opt_seq of
+    case H#elm_alter_op.opt_seq of
     first ->
-        AField = H#elm_alter.field#elm_field{seq = 1, pre_col_name = undefined},
+        AField = H#elm_alter_op.field#elm_field{seq = 1, pre_col_name = undefined},
         case Fields of
         [OriFirst | T] ->
             NOriFirst = OriFirst#elm_field{
@@ -419,11 +450,11 @@ insert_field(Fields, H) ->
     undefined ->
         case Fields of
         [] ->
-            AField = H#elm_alter.field#elm_field{seq = 1, pre_col_name = undefined},
+            AField = H#elm_alter_op.field#elm_field{seq = 1, pre_col_name = undefined},
             {ok, [AField]};
         _ ->
             PreCol = lists:last(Fields),
-            AField = H#elm_alter.field#elm_field{
+            AField = H#elm_alter_op.field#elm_field{
                 seq = PreCol#elm_field.seq + 1,
                 pre_col_name = PreCol#elm_field.name
             },
@@ -432,7 +463,7 @@ insert_field(Fields, H) ->
     {'after', Name} ->
         case split_fields(Fields, Name, []) of
         {ok, PreFields, PreCol, SufFields} ->
-            AField = H#elm_alter.field#elm_field{
+            AField = H#elm_alter_op.field#elm_field{
                 seq = PreCol#elm_field.seq + 1,
                 pre_col_name = PreCol#elm_field.name
             },
@@ -452,11 +483,11 @@ insert_field(Fields, H) ->
     end.
 
 modify_field(Fields, H) ->
-    case split_fields(Fields, H#elm_alter.old_col_name, []) of
+    case split_fields(Fields, H#elm_alter_op.old_col_name, []) of
     {ok, PreFields, OldCol, SuffFields} ->
-        case H#elm_alter.opt_seq of
+        case H#elm_alter_op.opt_seq of
         first ->
-            AField = H#elm_alter.field#elm_field{seq = 1, pre_col_name = undefined},
+            AField = H#elm_alter_op.field#elm_field{seq = 1, pre_col_name = undefined},
             case SuffFields of
             [FirstSuff | T] ->
                 NFirstSuff = FirstSuff#elm_field{pre_col_name = OldCol#elm_field.pre_col_name},
@@ -467,7 +498,7 @@ modify_field(Fields, H) ->
                 {ok, [AField | NPreFields]}
             end;
         undefined ->
-            AField = H#elm_alter.field#elm_field{
+            AField = H#elm_alter_op.field#elm_field{
                 seq = OldCol#elm_field.seq,
                 pre_col_name = OldCol#elm_field.pre_col_name
             },
@@ -481,7 +512,7 @@ modify_field(Fields, H) ->
         {'after', Name} ->
             case split_fields(PreFields, Name, []) of
             {ok, PPreFields, PCol, PSuffFields} ->
-                AField = H#elm_alter.field#elm_field{
+                AField = H#elm_alter_op.field#elm_field{
                     seq = PCol#elm_field.seq + 1,
                     pre_col_name = PCol#elm_field.name
                 },
@@ -489,7 +520,7 @@ modify_field(Fields, H) ->
                 [PFirstSuff | T] ->
                     NPFirstSuff = PFirstSuff#elm_field{
                         seq = PFirstSuff#elm_field.seq + 1,
-                        pre_col_name = H#elm_alter.field#elm_field.name
+                        pre_col_name = H#elm_alter_op.field#elm_field.name
                     },
                     NPSuffFields = [NPFirstSuff | [X#elm_field{seq = X#elm_field.seq + 1} || X <- T]],
                     case SuffFields of
@@ -505,7 +536,7 @@ modify_field(Fields, H) ->
             false ->
                 case split_fields(SuffFields, Name, []) of
                 {ok, SPreFields, SCol, SSuffFields} ->
-                    AField = H#elm_alter.field#elm_field{
+                    AField = H#elm_alter_op.field#elm_field{
                         seq = SCol#elm_field.seq,
                         pre_col_name = SCol#elm_field.name
                     },
@@ -543,7 +574,7 @@ modify_field(Fields, H) ->
     end.
 
 drop_field(Fields, H) ->
-    case split_fields(Fields, H#elm_alter.field#elm_field.name, []) of
+    case split_fields(Fields, H#elm_alter_op.field#elm_field.name, []) of
     {ok, PreFields, OldCol, SuffFields} ->
         case SuffFields of
         [FirstSuff | T] ->

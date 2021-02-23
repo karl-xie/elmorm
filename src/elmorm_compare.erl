@@ -162,15 +162,30 @@ format_type(Field) ->
     L1 =
     case Field#elm_field.is_signed of
     undefined -> L0;
-    true -> [<<" SIGNED">> | L0];
-    false -> [<<" UNSIGNED">> | L0]
+    true -> [<<" signed">> | L0];
+    false -> [<<" unsigned">> | L0]
     end,
     L2 =
     case is_integer(Field#elm_field.data_len) of
     true -> ["(", erlang:integer_to_binary(Field#elm_field.data_len), ")" | L1];
-    false -> L1
+    false -> 
+        case type_default_len(Field#elm_field.data_type, Field#elm_field.is_signed) of
+        {ok, DefaultLen} -> ["(", erlang:integer_to_binary(DefaultLen), ")" | L1];
+        false -> L1
+        end
     end,
     iolist_to_binary([erlang:atom_to_binary(Field#elm_field.data_type, utf8) | L2]).
+
+type_default_len(tinyint, false) -> {ok, 3};
+type_default_len(tinyint, _) -> {ok, 4};
+type_default_len(smallint, false) -> {ok, 5};
+type_default_len(smallint, _) -> {ok, 6};
+type_default_len(mediumint, _) -> {ok, 8};
+type_default_len(int, false) -> {ok, 10};
+type_default_len(int, _) -> {ok, 11};
+type_default_len(bigint, _) -> {ok, 20};
+type_default_len(_, _) -> false.
+
 
 format_column_options(Options) ->
     iolist_to_binary(format_column_options(?COLUMN_OPTS_SEQ, Options, [])).
@@ -191,6 +206,16 @@ format_column_options([null | T], Options, R) ->
         format_column_options(T, Options, NewR);
     false ->
         NewR = [<<" NOT ", (maps:get(null, ?COLUMN_OPTS_SNAME))/binary>> | R],
+        format_column_options(T, Options, NewR)
+    end;
+format_column_options([default = OptName | T], Options, R) ->
+    case maps:get(OptName, Options) of
+    undefined -> format_column_options(T, Options, R);
+    Value when is_integer(Value) ->
+        NewR = [iolist_to_binary([" ", maps:get(OptName, ?COLUMN_OPTS_SNAME), " '", format_option_value(Value), "'"]) | R],
+        format_column_options(T, Options, NewR);
+    Value ->
+        NewR = [iolist_to_binary([" ", maps:get(OptName, ?COLUMN_OPTS_SNAME), " ", format_option_value(Value)]) | R],
         format_column_options(T, Options, NewR)
     end;
 format_column_options([OptName | T], Options, R) ->
@@ -261,7 +286,7 @@ format_table_index(#elm_index{class = normal} = H) ->
     undefined -> L1;
     IndexName -> [" `", IndexName, "`" | L1]
     end,
-    iolist_to_binary([["INDEX" | L2], format_index_options(H#elm_index.options)]);
+    iolist_to_binary([["KEY" | L2], format_index_options(H#elm_index.options)]);
 format_table_index(#elm_index{class = unique} = H) ->
     L0 = [" ", format_key_parts(H#elm_index.fields)],
     L1 =

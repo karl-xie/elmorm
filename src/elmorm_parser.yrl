@@ -173,21 +173,21 @@ k_set_dal -> set names var ';' : {set_charset, unwrap('$3'), default}.
 k_set_dal -> set names var collate var ';' : {set_charset, unwrap('$3'), unwrap('$5')}.
 
 %% alter statement
-k_alter_defs -> alter table k_name k_alter_operates : {alter, '$3', '$4'}.
+k_alter_defs -> alter table k_name k_alter_operates ';' : {alter, '$3', '$4'}.
 k_alter_operates -> k_alter_operate : ['$1'].
 k_alter_operates -> k_alter_operate ',' k_alter_operates : ['$1' | '$3'].
 
-k_alter_operate -> add column k_col_def k_alter_seq ';' : {add, '$3', '$6', '$7'}.
-k_alter_operate -> add k_col_def k_alter_seq ';' : {add, '$3', '$5', '$6'}.
-k_alter_operate -> drop column var ';' : {drop, '$3', '$6'}.
-k_alter_operate -> modify column k_col_def k_alter_seq ';' : {modify, '$3', '$6', '$7'}.
-k_alter_operate -> modify k_col_def k_alter_seq ';' : {modify, '$3', '$5', '$6'}.
-k_alter_operate -> change column k_name k_col_def k_alter_seq ';' : {change, '$3', '$6', '$7', '$8'}. 
-k_alter_operate -> change k_name k_col_def k_alter_seq ';' : {change, '$3', '$5', '$6', '$7'}.
+k_alter_operate -> add column k_col_def k_alter_seq : {add, '$3', '$4'}.
+k_alter_operate -> add k_col_def k_alter_seq : {add, '$2', '$3'}.
+k_alter_operate -> modify column k_col_def k_alter_seq : {modify, '$3', '$4'}.
+k_alter_operate -> modify k_col_def k_alter_seq : {modify, '$2', '$3'}.
+k_alter_operate -> change column k_name k_col_def k_alter_seq : {change, erlang:list_to_binary('$3'), '$4', '$5'}. 
+k_alter_operate -> change k_name k_col_def k_alter_seq : {change, erlang:list_to_binary('$2'), '$3', '$4'}.
+k_alter_operate -> drop column var : {drop, '$3'}.
 
 k_alter_seq -> '$empty' : undefined.
 k_alter_seq -> first : first.
-k_alter_seq -> after k_name : {'after', '$2'}.
+k_alter_seq -> after k_name : {'after', erlang:list_to_binary('$2')}.
 
 %% end of all statement
 
