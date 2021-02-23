@@ -169,23 +169,12 @@ format_type(Field) ->
     case is_integer(Field#elm_field.data_len) of
     true -> ["(", erlang:integer_to_binary(Field#elm_field.data_len), ")" | L1];
     false -> 
-        case type_default_len(Field#elm_field.data_type, Field#elm_field.is_signed) of
+        case elmorm_compile:type_default_len(Field#elm_field.data_type, Field#elm_field.is_signed) of
         {ok, DefaultLen} -> ["(", erlang:integer_to_binary(DefaultLen), ")" | L1];
         false -> L1
         end
     end,
     iolist_to_binary([erlang:atom_to_binary(Field#elm_field.data_type, utf8) | L2]).
-
-type_default_len(tinyint, false) -> {ok, 3};
-type_default_len(tinyint, _) -> {ok, 4};
-type_default_len(smallint, false) -> {ok, 5};
-type_default_len(smallint, _) -> {ok, 6};
-type_default_len(mediumint, _) -> {ok, 8};
-type_default_len(int, false) -> {ok, 10};
-type_default_len(int, _) -> {ok, 11};
-type_default_len(bigint, _) -> {ok, 20};
-type_default_len(_, _) -> false.
-
 
 format_column_options(Options) ->
     iolist_to_binary(format_column_options(?COLUMN_OPTS_SEQ, Options, [])).

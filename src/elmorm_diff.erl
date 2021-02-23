@@ -97,7 +97,7 @@ modify_columns_loop(FieldsB, FieldsA, _Cur, _DLA, _DLB, 0, _Standard, R) ->
     NewR = 
     lists:foldl(fun(X, InAcc) ->
         Old = lists:keyfind(X#elm_field.name, #elm_field.name, FieldsA),
-        case Old#elm_field{seq = 0, pre_col_name = <<>>} =:= X#elm_field{seq = 0, pre_col_name = <<>>} of
+        case is_column_same(Old, X) of
         true -> InAcc;
         false -> [X | InAcc]
         end
@@ -105,7 +105,7 @@ modify_columns_loop(FieldsB, FieldsA, _Cur, _DLA, _DLB, 0, _Standard, R) ->
     lists:reverse(NewR);
 modify_columns_loop([#elm_field{name = Cur} = H | T], FieldsA, Cur, DLA, DLB, Score, Standard, R) ->
     OldH = lists:keyfind(Cur, #elm_field.name, FieldsA),
-    case OldH#elm_field{seq = 0, pre_col_name = <<>>} =:= H#elm_field{seq = 0, pre_col_name = <<>>} of
+    case is_column_same(OldH, H) of
     true ->
         {ok, Next} = elmorm_dlink:next(Cur, DLA),
         modify_columns_loop(T, FieldsA, Next, DLA, DLB, Score, Standard, R);
@@ -185,3 +185,31 @@ diff_index(IndexLA, IndexLB) ->
     Add = IndexLB -- IndexLA,
     {ok, Remove, Add}.
 
+is_column_same(ColA, ColB) ->
+    ColA2 = ColA#elm_field{
+        seq = 0,
+        pre_col_name = <<>>,
+        data_len = 
+            case erlang:is_integer(ColA#elm_field.data_len) of
+            true -> ColA#elm_field.data_len;
+            _ ->
+                case elmorm_compile:type_default_len(ColA#elm_field.data_type, ColA#elm_field.is_signed) of
+                {ok, ALen} -> ALen;
+                false -> undefined
+                end
+            end
+    },
+    ColB2 = ColB#elm_field{
+        seq = 0,
+        pre_col_name = <<>>,
+        data_len = 
+            case erlang:is_integer(ColB#elm_field.data_len) of
+            true -> ColB#elm_field.data_len;
+            _ ->
+                case elmorm_compile:type_default_len(ColB#elm_field.data_type, ColB#elm_field.is_signed) of
+                {ok, BLen} -> BLen;
+                false -> undefined
+                end
+            end
+    },
+    ColA2 =:= ColB2.

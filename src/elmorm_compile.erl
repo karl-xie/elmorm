@@ -4,6 +4,7 @@
 
 -export([parse_file/1]).
 -export([parse_binary/1]).
+-export([type_default_len/2]).
 
 parse_file(FileName) ->
     case file:read_file(FileName) of
@@ -596,3 +597,12 @@ split_fields([#elm_field{name = Name} = H | T], Name, PreFields) ->
 split_fields([H | T], Name, PreFields) ->
     split_fields(T, Name, [H | PreFields]).
 
+type_default_len(tinyint, false) -> {ok, 3};
+type_default_len(tinyint, _) -> {ok, 4};
+type_default_len(smallint, false) -> {ok, 5};
+type_default_len(smallint, _) -> {ok, 6};
+type_default_len(mediumint, _) -> {ok, 8};
+type_default_len(int, false) -> {ok, 10};
+type_default_len(int, _) -> {ok, 11};
+type_default_len(bigint, _) -> {ok, 20};
+type_default_len(_, _) -> false.
