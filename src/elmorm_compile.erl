@@ -310,7 +310,7 @@ collect_column_opt([{default, Default} | T], Opts) when is_list(Default) ->
 collect_column_opt([{default, Default} | T], Opts) when is_integer(Default) ->
     collect_column_opt(T, Opts#{default => Default});
 collect_column_opt([{default, null} | T], Opts) ->
-    collect_column_opt(T, Opts#{default => null});
+    collect_column_opt(T, Opts#{default => <<"NULL">>});
 collect_column_opt([{comment, Comment} | T], Opts) when is_list(Comment) ->
     collect_column_opt(T, Opts#{comment => unicode:characters_to_binary(Comment)});
 collect_column_opt([{storage, Storage} | T], Opts) ->
