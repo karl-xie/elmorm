@@ -198,11 +198,7 @@ is_column_same(ColA, ColB) ->
                 false -> undefined
                 end
             end,
-        options = 
-            case maps:get(default, ColA#elm_field.options) of
-            <<"NULL">> -> (ColA#elm_field.options)#{default => undefined};
-            _ -> ColA#elm_field.options
-            end
+        options = unify_options(ColA#elm_field.options)
     },
     ColB2 = ColB#elm_field{
         seq = 0,
@@ -216,10 +212,19 @@ is_column_same(ColA, ColB) ->
                 false -> undefined
                 end
             end,
-        options = 
-            case maps:get(default, ColB#elm_field.options) of
-            <<"NULL">> -> (ColB#elm_field.options)#{default => undefined};
-            _ -> ColB#elm_field.options
-            end
+        options = unify_options(ColB#elm_field.options)
     },
     ColA2 =:= ColB2.
+
+unify_options(Options) ->
+    Options1 = 
+        case maps:get(default, Options) of
+        <<"NULL">> -> Options#{default => undefined};
+        _ -> Options
+        end,
+    Options2 = 
+        case maps:get(null, Options1) of
+        false -> Options1;
+        _ -> Options1#{null => true}
+        end,
+    Options2.
