@@ -186,11 +186,6 @@ diff_index(IndexLA, IndexLB) ->
     {ok, Remove, Add}.
 
 is_column_same(ColA, ColB, TabOptions) ->
-    io:format("--------------------------~n", []),
-    io:format("ColA is ~p~n", [ColA]),
-    io:format("ColB is ~p~n", [ColB]),
-    io:format("TabOptions is ~p~n", [TabOptions]),
-    io:format("--------------------------~n", []),
     ColA2 = ColA#elm_field{
         seq = 0,
         pre_col_name = <<>>,
