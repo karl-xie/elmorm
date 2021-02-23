@@ -120,6 +120,7 @@ collect_table_def([{col, Name, DataType, ColOptions} | T], Map) ->
         {ok, {DType, DLen, Charset, IsSigned}} ->
             case collect_column_opts(ColOptions) of
             {ok, Options} ->
+                FOptions = fix_type_options(DType, Options),
                 case Cols of
                 [] -> PreColName = undefined;
                 [PreCol | _] -> PreColName = PreCol#elm_field.name
@@ -132,7 +133,7 @@ collect_table_def([{col, Name, DataType, ColOptions} | T], Map) ->
                     data_len = DLen,
                     charset = Charset,
                     is_signed = IsSigned,
-                    options = Options
+                    options = FOptions
                 },
                 collect_table_def(T, Map#{col_seq => ColSeq + 1, cols => [Col | Cols]});
             {error, Error} ->
@@ -606,3 +607,16 @@ type_default_len(int, false) -> {ok, 10};
 type_default_len(int, _) -> {ok, 11};
 type_default_len(bigint, _) -> {ok, 20};
 type_default_len(_, _) -> false.
+
+fix_type_options(DType, Options) when DType =:= tinyint; DType =:= smallint; 
+    DType =:= mediumint; DType =:= int; DType =:= bigint ->
+    case maps:get(default, Options) of
+    undefined ->
+        case maps:get(null, Options) of
+        true ->  Options#{default => "NULL"};
+        _ -> Options
+        end;
+    _ -> Options
+    end;
+fix_type_options(_, Options) ->
+    Options.
