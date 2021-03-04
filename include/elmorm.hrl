@@ -7,7 +7,6 @@
 
 -record(elm_index_field, {
     seq :: integer(),
-    col_seq :: integer(),
     col_name :: binary(),
     len :: integer() | undefined,
     sort :: asc | desc | undefined

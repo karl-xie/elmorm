@@ -19,7 +19,7 @@ diff(TableA, TableB) ->
     {ok, Map}.
 
 calc_table_options(TableA, TableB) ->
-    L1 = maps:to_list(TableB#elm_table.options),
+    L1 = maps:to_list(maps:remove(auto_increment, TableB#elm_table.options)),
     {_Rest, Change} =
     lists:foldl(fun
     ({Key, undefined}, {InAOptions, InChange}) ->
@@ -32,7 +32,7 @@ calc_table_options(TableA, TableB) ->
         _Other ->
             {maps:remove(Key, InAOptions), maps:put(Key, ValueB, InChange)}
         end
-    end, {TableA#elm_table.options, #{}}, L1),
+    end, {maps:remove(auto_increment, TableA#elm_table.options), #{}}, L1),
     {ok, Change}.
 
 
