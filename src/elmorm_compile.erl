@@ -41,7 +41,7 @@ collect_table([{table, Name, TableOpts, TableDefinds} | T], Statements, Tables) 
     case collect_table_opts(TableOpts) of
     {ok, Options} ->
         case collect_table_defs(TableDefinds) of
-        {ok, FieldL, IndexL, PrimaryL} ->
+        {ok, FieldL, IndexL, PrimaryL, IdxNameMap} ->
             LenOfPrimary = length(PrimaryL),
             case LenOfPrimary > 1 of
             true -> 
@@ -52,7 +52,8 @@ collect_table([{table, Name, TableOpts, TableDefinds} | T], Statements, Tables) 
                     options = Options,
                     fields = FieldL,
                     primary_key = PrimaryL,
-                    index = IndexL
+                    index = IndexL,
+                    idx_name_map = IdxNameMap
                 },
                 collect_table(T, Statements, [Table | Tables])
             end;
@@ -112,8 +113,8 @@ collect_table_defs(TableDefinds) ->
     collect_table_def(TableDefinds, Map).
 collect_table_def([], Map) ->
     #{cols := Cols, indexs := Indexs, pri := Primary, idx_name := IName} = Map,
-    Indexs2 = pretreat_index_name(lists:reverse(Indexs), IName),
-    {ok, lists:reverse(Cols), Indexs2, lists:reverse(Primary)};
+    {Indexs2, IName2} = pretreat_index_name(lists:reverse(Indexs), IName),
+    {ok, lists:reverse(Cols), Indexs2, lists:reverse(Primary), IName2};
 collect_table_def([{col, Name, DataType, ColOptions} | T], Map) ->
     #{col_seq := ColSeq, cols := Cols} = Map,
     case decode_data_type(DataType) of
@@ -217,7 +218,7 @@ collect_table_def([H | _], _Map) ->
 collect_alter_def([], _Name, Operates) -> {ok, lists:reverse(Operates)};
 collect_alter_def([{add, ColDef, Seq} | T], Name, Operates) ->
     case collect_table_defs([ColDef]) of
-    {ok, [Column], [], []} ->
+    {ok, [Column], [], [], _IdxNameMap} ->
         Op = #elm_alter_op{
             method = add,
             field = Column,
@@ -229,7 +230,7 @@ collect_alter_def([{add, ColDef, Seq} | T], Name, Operates) ->
     end;
 collect_alter_def([{modify, ColDef, Seq} | T], Name, Operates) ->
     case collect_table_defs([ColDef]) of
-    {ok, [Column], [], []} ->
+    {ok, [Column], [], [], _IdxNameMap} ->
         Op = #elm_alter_op{
             method = modify,
             old_col_name = Column#elm_field.name,
@@ -242,7 +243,7 @@ collect_alter_def([{modify, ColDef, Seq} | T], Name, Operates) ->
     end;
 collect_alter_def([{change, OldColName, ColDef, Seq} | T], Name, Operates) ->
     case collect_table_defs([ColDef]) of
-    {ok, [Column], [], []} ->
+    {ok, [Column], [], [], _IdxNameMap} ->
         Op = #elm_alter_op{
             method = change,
             old_col_name = OldColName,
@@ -259,11 +260,28 @@ collect_alter_def([{drop, ColName} | T], Name, Operates) ->
         old_col_name = erlang:list_to_binary(ColName),
         opt_seq = undefined
     },
+    collect_alter_def(T, Name, [Op | Operates]);
+collect_alter_def([{add_index, IdxDef} | T], Name, Operates) ->
+    case collect_table_defs([IdxDef]) of
+    {ok, [], IndexL, PrimaryL, _IdxNameMap} ->
+        Op = #elm_alter_op{
+            method = add_index,
+            field = hd(IndexL ++ PrimaryL)
+        },
+        collect_alter_def(T, Name, [Op | Operates]);
+    {error, Error} ->
+        {error, {Name, Error}}
+    end;
+collect_alter_def([{drop_index, IdxName} | T], Name, Operates) ->
+    Op = #elm_alter_op{
+        method = drop_index,
+        old_col_name = erlang:list_to_binary(IdxName)
+    },
     collect_alter_def(T, Name, [Op | Operates]).
 
 pretreat_index_name(Indexs, NameMap) ->
     pretreat_index_name(Indexs, NameMap, []).
-pretreat_index_name([], _NameMap, R) -> lists:reverse(R);
+pretreat_index_name([], NameMap, R) -> {lists:reverse(R), NameMap};
 pretreat_index_name([H | T], NameMap, R) ->
     case is_binary(H#elm_index.name) of
     true -> pretreat_index_name(T, NameMap, [H | R]);
@@ -327,19 +345,13 @@ collect_index_parts(IdxParts, Cols) ->
 collect_index_part([], _Cols, _Seq, Result) -> {ok, lists:reverse(Result)};
 collect_index_part([{Name, Len, Sort} | T], Cols, Seq, Result) ->
     BName = erlang:list_to_binary(Name),
-    case lists:keyfind(BName, #elm_field.name, Cols) of
-    false ->
-        {error, {index_column_not_found, Name}};
-    #elm_field{seq = ColSeq} ->
-        E = #elm_index_field{
-            seq = Seq,
-            col_seq = ColSeq,
-            col_name = BName,
-            len = Len,
-            sort = Sort
-        },
-        collect_index_part(T, Cols, Seq + 1, [E | Result])
-    end.
+    E = #elm_index_field{
+        seq = Seq,
+        col_name = BName,
+        len = Len,
+        sort = Sort
+    },
+    collect_index_part(T, Cols, Seq + 1, [E | Result]).
 
 collect_index_opts(IdxOptions) ->
     collect_index_opt(IdxOptions, ?INDEX_OPTS).
@@ -398,8 +410,6 @@ apply_alter_op_loop([#elm_alter_op{method = add} = Op | T], ElmTable) ->
         NElmTable = ElmTable#elm_table{fields = NFields},
         apply_alter_op_loop(T, NElmTable);
     false ->
-        io:format("11111111 ElmTable is ~p~n", [ElmTable]),
-        io:format("11111111 Op is ~p~n", [Op]),
         {error, {add_column_fail, TableName, Op#elm_alter_op.field#elm_field.name}}
     end;
 apply_alter_op_loop([#elm_alter_op{method = modify} = Op | T], ElmTable) ->
@@ -409,8 +419,6 @@ apply_alter_op_loop([#elm_alter_op{method = modify} = Op | T], ElmTable) ->
         NElmTable = ElmTable#elm_table{fields = NFields},
         apply_alter_op_loop(T, NElmTable);
     false ->
-        io:format("22222222 ElmTable is ~p~n", [ElmTable]),
-        io:format("22222222 Op is ~p~n", [Op]),
         {error, {modify_column_fail, TableName, Op#elm_alter_op.field#elm_field.name}}
     end;
 apply_alter_op_loop([#elm_alter_op{method = change} = Op | T], ElmTable) ->
@@ -420,8 +428,6 @@ apply_alter_op_loop([#elm_alter_op{method = change} = Op | T], ElmTable) ->
         NElmTable = ElmTable#elm_table{fields = NFields},
         apply_alter_op_loop(T, NElmTable);
     false ->
-        io:format("33333333 ElmTable is ~p~n", [ElmTable]),
-        io:format("33333333 Op is ~p~n", [Op]),
         {error, {change_column_fail, TableName, Op#elm_alter_op.field#elm_field.name}}
     end;
 apply_alter_op_loop([#elm_alter_op{method = drop} = Op | T], ElmTable) ->
@@ -432,7 +438,33 @@ apply_alter_op_loop([#elm_alter_op{method = drop} = Op | T], ElmTable) ->
         apply_alter_op_loop(T, NElmTable);
     false ->
         {error, {drop_column_fail, TableName, Op#elm_alter_op.old_col_name}}
-    end.
+    end;
+apply_alter_op_loop([#elm_alter_op{method = add_index} = Op | T], ElmTable) ->
+    #elm_alter_op{field = Index} = Op,
+    #elm_index{class = IndexClass} = Index,
+    #elm_table{primary_key = OldPKeyL, index = OldIndexL, idx_name_map = OldIdxNameMap} = ElmTable,
+    case IndexClass of
+        primary ->
+            NElmTable = ElmTable#elm_table{primary_key = OldPKeyL ++ [Index]},
+            apply_alter_op_loop(T, NElmTable);
+        _ ->
+            IdxSeq = 
+                case OldIndexL of
+                [H | _] -> H#elm_index.seq + 1;
+                _ -> 1
+                end,
+            {[Index2], IName2} = pretreat_index_name([Index], OldIdxNameMap),
+            Index3 = Index2#elm_index{seq = IdxSeq},
+            NElmTable = ElmTable#elm_table{index = OldIndexL ++ [Index3], idx_name_map = IName2},
+            apply_alter_op_loop(T, NElmTable)
+    end;
+apply_alter_op_loop([#elm_alter_op{method = drop_index} = Op | T], ElmTable) ->
+    #elm_alter_op{old_col_name = IdxName} = Op,
+    #elm_table{index = OldIndexL, idx_name_map = OldIdxNameMap} = ElmTable,
+    IndexL2 = delete_from_index_list(OldIndexL, IdxName),
+    IName2 = maps:remove(IdxName, OldIdxNameMap),
+    NElmTable = ElmTable#elm_table{index = IndexL2, idx_name_map = IName2},
+    apply_alter_op_loop(T, NElmTable).
 
 
 insert_field(Fields, H) ->
@@ -627,3 +659,13 @@ fix_type_options(DType, Options) when DType =:= tinyint; DType =:= smallint;
     end;
 fix_type_options(_, Options) ->
     Options.
+
+delete_from_index_list(OldIndexL, IdxName) ->
+    delete_from_index_list_loop(OldIndexL, IdxName, []).
+
+delete_from_index_list_loop([], _IdxName, Result) -> lists:reverse(Result);
+delete_from_index_list_loop([#elm_index{name = IdxName} | T], IdxName, Result) ->
+    T2 = [X#elm_index{seq = X#elm_index.seq - 1} || X <- T],
+    lists:reverse(Result, T2);
+delete_from_index_list_loop([H | T], IdxName, Result) ->
+    delete_from_index_list_loop(T, IdxName, [H | Result]).

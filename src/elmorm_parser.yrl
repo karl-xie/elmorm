@@ -30,6 +30,7 @@ Rootsymbol k_elmorm.
 Endsymbol '$end'.
 
 k_elmorm -> '$empty' : [].
+k_elmorm -> ';' : [].
 k_elmorm -> k_create_ddl k_elmorm : ['$1' | '$2'].
 k_elmorm -> k_drop_ddl k_elmorm : ['$1' | '$2'].
 k_elmorm -> k_set_dal k_elmorm : ['$1' | '$2'].
@@ -184,6 +185,8 @@ k_alter_operate -> modify k_col_def k_alter_seq : {modify, '$2', '$3'}.
 k_alter_operate -> change column k_name k_col_def k_alter_seq : {change, erlang:list_to_binary('$3'), '$4', '$5'}. 
 k_alter_operate -> change k_name k_col_def k_alter_seq : {change, erlang:list_to_binary('$2'), '$3', '$4'}.
 k_alter_operate -> drop column var : {drop, '$3'}.
+k_alter_operate -> add k_idx_def : {add_index, '$2'}.
+k_alter_operate -> drop index k_name : {drop_index, '$3'}.
 
 k_alter_seq -> '$empty' : undefined.
 k_alter_seq -> first : first.

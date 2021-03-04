@@ -38,13 +38,14 @@
     options :: map(),
     fields :: [#elm_field{}],
     primary_key :: [#elm_index{}],
-    index :: [#elm_index{}]
+    index :: [#elm_index{}],
+    idx_name_map :: #{}
 }).
 
 -record(elm_alter_op, {
     method :: atom(),
     old_col_name :: binary(),
-    field :: #elm_field{} | undefined,
+    field :: #elm_field{} | #elm_index{} | undefined,
     opt_seq :: atom()
 }).
 
