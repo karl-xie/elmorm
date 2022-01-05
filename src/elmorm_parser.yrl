@@ -150,12 +150,19 @@ k_table_nn_options -> k_table_option k_table_nn_options : ['$1' | '$2'].
 k_table_nn_options -> k_table_option ',' k_table_nn_options : ['$1' | '$3'].
 
 k_table_option -> default character set '=' k_var : {charset, '$5'}.
+k_table_option -> default character set k_var : {charset, '$4'}.
 k_table_option -> default charset '=' k_var : {charset, '$4'}.
+k_table_option -> default charset k_var : {charset, '$3'}.
 k_table_option -> collate '=' k_var : {collate, '$3'}.
+k_table_option -> collate k_var : {collate, '$2'}.
 k_table_option -> engine '=' k_var : {engine, '$3'}.
+k_table_option -> engine k_var : {engine, '$2'}.
 k_table_option -> comment '=' k_var : {comment, '$3'}.
+k_table_option -> comment k_var : {comment, '$2'}.
 k_table_option -> alias '=' k_var : {alias, '$3'}.
+k_table_option -> alias k_var : {alias, '$2'}.
 k_table_option -> codec '=' k_var : {codec, '$3'}.
+k_table_option -> codec k_var : {codec, '$2'}.
 k_table_option -> auto_increment '=' integer : {auto_increment, unwrap('$3')}.
 
 k_drop_ddl -> drop table if exists k_names ';' : {drop_table, '$5'}.
