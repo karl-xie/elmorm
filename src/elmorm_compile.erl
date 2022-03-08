@@ -277,6 +277,11 @@ collect_alter_def([{drop_index, IdxName} | T], Name, Operates) ->
         method = drop_index,
         old_col_name = erlang:list_to_binary(IdxName)
     },
+    collect_alter_def(T, Name, [Op | Operates]);
+collect_alter_def([{drop_primary_key} | T], Name, Operates) ->
+    Op = #elm_alter_op{
+        method = drop_primary_key
+    },
     collect_alter_def(T, Name, [Op | Operates]).
 
 pretreat_index_name(Indexs, NameMap) ->
@@ -464,8 +469,10 @@ apply_alter_op_loop([#elm_alter_op{method = drop_index} = Op | T], ElmTable) ->
     IndexL2 = delete_from_index_list(OldIndexL, IdxName),
     IName2 = maps:remove(IdxName, OldIdxNameMap),
     NElmTable = ElmTable#elm_table{index = IndexL2, idx_name_map = IName2},
+    apply_alter_op_loop(T, NElmTable);
+apply_alter_op_loop([#elm_alter_op{method = drop_primary_key} | T], ElmTable) ->
+    NElmTable = ElmTable#elm_table{primary_key = []},
     apply_alter_op_loop(T, NElmTable).
-
 
 insert_field(Fields, H) ->
     case H#elm_alter_op.opt_seq of
