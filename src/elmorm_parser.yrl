@@ -21,7 +21,7 @@ Terminals ';' '=' ',' '(' ')' '.' string integer float var name
     create table default charset character set engine comment alias codec
     tinyint smallint int mediumint bigint signed unsigned varchar char not null
     storage collate primary key index using tinyblob blob mediumblob longblob
-    drop exists if names global local session qualifier text auto_increment unique
+    drop exists if names global local session qualifier tinytext text mediumtext longtext auto_increment unique
     key_block_size with parser visible invisible engine_attribute secondary_engine_attribute
     alter add modify column after first change.
 
@@ -66,7 +66,10 @@ k_data_type_int -> bigint k_data_type_len k_data_type_is_signed : {bigint, '$2',
 k_data_type_varchar -> varchar '(' integer ')' k_data_type_charset: {varchar, unwrap('$3'), '$5'}.
 k_data_type_char -> char k_data_type_len k_data_type_charset : {char, '$2', '$3'}.
 
+k_data_type_text -> tinytext : tinytext.
 k_data_type_text -> text : text.
+k_data_type_text -> mediumtext : mediumtext.
+k_data_type_text -> longtext : longtext.
 
 k_data_type_blob -> tinyblob : tinyblob.
 k_data_type_blob -> blob : blob.
@@ -194,6 +197,8 @@ k_alter_operate -> change k_name k_col_def k_alter_seq : {change, erlang:list_to
 k_alter_operate -> drop column var : {drop, '$3'}.
 k_alter_operate -> add k_idx_def : {add_index, '$2'}.
 k_alter_operate -> drop index k_name : {drop_index, '$3'}.
+k_alter_operate -> drop key k_name : {drop_index, '$3'}.
+k_alter_operate -> drop primary key : {drop_primary_key}.
 
 k_alter_seq -> '$empty' : undefined.
 k_alter_seq -> first : first.
