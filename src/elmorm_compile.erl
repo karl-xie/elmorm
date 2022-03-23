@@ -320,7 +320,10 @@ decode_data_type(tinyblob) -> {ok, {tinyblob, undefined, undefined, undefined}};
 decode_data_type(blob) -> {ok, {blob, undefined, undefined, undefined}};
 decode_data_type(mediumblob) -> {ok, {mediumblob, undefined, undefined, undefined}};
 decode_data_type(longblob) -> {ok, {longblob, undefined, undefined, undefined}};
+decode_data_type(tinytext) -> {ok, {tinytext, undefined, undefined, undefined}};
 decode_data_type(text) -> {ok, {text, undefined, undefined, undefined}};
+decode_data_type(mediumtext) -> {ok, {mediumtext, undefined, undefined, undefined}};
+decode_data_type(longtext) -> {ok, {longtext, undefined, undefined, undefined}};
 decode_data_type(Other) -> {error, {unrecognized_data_type, Other}}.
 
 collect_column_opts(ColOptions) ->
