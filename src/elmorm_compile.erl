@@ -655,7 +655,7 @@ update_index_after_column_modify(Op, ElmTable) ->
     true -> ElmTable;
     _ ->
         #elm_table{primary_key = PriKeyL, index = IdxL, idx_name_map = IdxNameMap} = ElmTable,
-        case maps:is_key(OldColName) of
+        case maps:is_key(OldColName, IdxNameMap) of
         false -> ElmTable;
         _ ->
             IdxNameMap2 = maps:remove(OldColName, IdxNameMap),
