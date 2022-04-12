@@ -201,14 +201,20 @@ collect_table_def([{unique_idx, NameAndType, IdxParts} | T], Map) ->
     IdxType = proplists:get_value(type, NameAndType, undefined),
     case collect_index_parts(IdxParts, Cols) of
     {ok, Fields} ->
-        Index = #elm_index{
-            seq = IdxSeq,
-            name = Name,
-            class = unique,
-            index_type = IdxType,
-            fields = Fields
-        },
-        collect_table_def(T, Map#{idx_seq => IdxSeq + 1, indexs => [Index | Indexs], idx_name => NIName});
+        case collect_index_opts([]) of
+        {ok, Options} ->
+            Index = #elm_index{
+                seq = IdxSeq,
+                name = Name,
+                class = unique,
+                index_type = IdxType,
+                fields = Fields,
+                options = Options
+            },
+            collect_table_def(T, Map#{idx_seq => IdxSeq + 1, indexs => [Index | Indexs], idx_name => NIName});
+        {error, Error} ->
+            {error, Error}
+        end;
     {error, Error} ->
         {error, Error}
     end;
