@@ -425,7 +425,8 @@ apply_alter_op_loop([#elm_alter_op{method = modify} = Op | T], ElmTable) ->
     case modify_field(Fields, Op) of
     {ok, NFields} ->
         NElmTable = ElmTable#elm_table{fields = NFields},
-        apply_alter_op_loop(T, NElmTable);
+        NElmTable2 = update_index_after_column_modify(Op, NElmTable),
+        apply_alter_op_loop(T, NElmTable2);
     false ->
         {error, {modify_column_fail, TableName, Op#elm_alter_op.field#elm_field.name}}
     end;
@@ -434,7 +435,8 @@ apply_alter_op_loop([#elm_alter_op{method = change} = Op | T], ElmTable) ->
     case modify_field(Fields, Op) of
     {ok, NFields} ->
         NElmTable = ElmTable#elm_table{fields = NFields},
-        apply_alter_op_loop(T, NElmTable);
+        NElmTable2 = update_index_after_column_modify(Op, NElmTable),
+        apply_alter_op_loop(T, NElmTable2);
     false ->
         {error, {change_column_fail, TableName, Op#elm_alter_op.field#elm_field.name}}
     end;
@@ -443,7 +445,8 @@ apply_alter_op_loop([#elm_alter_op{method = drop} = Op | T], ElmTable) ->
     case drop_field(Fields, Op) of
     {ok, NFields} ->
         NElmTable = ElmTable#elm_table{fields = NFields},
-        apply_alter_op_loop(T, NElmTable);
+        NElmTable2 = update_index_after_column_drop(Op, NElmTable),
+        apply_alter_op_loop(T, NElmTable2);
     false ->
         {error, {drop_column_fail, TableName, Op#elm_alter_op.old_col_name}}
     end;
@@ -639,6 +642,54 @@ split_fields([#elm_field{name = Name} = H | T], Name, PreFields) ->
     {ok, lists:reverse(PreFields), H, T};
 split_fields([H | T], Name, PreFields) ->
     split_fields(T, Name, [H | PreFields]).
+
+update_index_after_column_modify(Op, ElmTable) ->
+    #elm_alter_op{old_col_name = OldColName, field = #elm_field{name = Name}} = Op,
+    case OldColName =:= Name of
+    true -> ElmTable;
+    _ ->
+        #elm_table{primary_key = PriKeyL, index = IdxL, idx_name_map = IdxNameMap} = ElmTable,
+        case maps:is_key(OldColName) of
+        false -> ElmTable;
+        _ ->
+            IdxNameMap2 = maps:remove(OldColName, IdxNameMap),
+            IdxNameMap3 = maps:put(Name, true, IdxNameMap2),
+            F1 = fun
+                (#elm_index_field{col_name = XColName} = EIF) when XColName =:= OldColName -> 
+                    EIF#elm_index_field{col_name = Name};
+                (EIF) -> EIF
+            end,
+            F2 = fun(#elm_index{fields = IdxFields} = EI) ->
+                EI#elm_index{fields = lists:map(F1, IdxFields)}
+            end,
+            PriKeyL2 = lists:map(F2, PriKeyL),
+            IdxL2 = lists:map(F2, IdxL),
+            ElmTable#elm_table{primary_key = PriKeyL2, index = IdxL2, idx_name_map = IdxNameMap3}
+        end
+    end.
+
+update_index_after_column_drop(Op, ElmTable) ->
+    #elm_alter_op{old_col_name = OldColName} = Op,
+    #elm_table{primary_key = PriKeyL, index = IdxL, idx_name_map = IdxNameMap} = ElmTable,
+    case maps:is_key(OldColName, IdxNameMap) of
+    false -> ElmTable;
+    _ ->
+        IdxNameMap2 = maps:remove(OldColName, IdxNameMap),
+        F1 = fun
+            (#elm_index_field{col_name = XColName}) ->
+                OldColName =:= XColName;
+            (_) -> true
+        end,
+        F2 = fun(#elm_index{fields = IdxFields} = EI) ->
+            case lists:filter(F1, IdxFields) of
+                [] -> false;
+                IdxFields2 -> {true, EI#elm_index{fields = IdxFields2}}
+            end
+        end,
+        PriKeyL2 = lists:filtermap(F2, PriKeyL),
+        IdxL2 = lists:filtermap(F2, IdxL),
+        ElmTable#elm_table{primary_key = PriKeyL2, index = IdxL2, idx_name_map = IdxNameMap2}
+    end.
 
 type_default_len(tinyint, false) -> {ok, 3};
 type_default_len(tinyint, _) -> {ok, 4};
