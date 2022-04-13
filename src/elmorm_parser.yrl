@@ -97,6 +97,10 @@ k_col_option -> comment string : {comment, unwrap('$2')}.
 k_col_option -> storage var : {storage, unwrap('$2')}.
 k_col_option -> collate var : {collate, unwrap('$2')}.
 k_col_option -> auto_increment : {auto_increment, true}.
+k_col_option -> primary key: {idx_type, primary}.
+k_col_option -> unique : {idx_type, unique}.
+k_col_option -> key : {idx_type, primary}. %% we must handle conflict of index definition in compile because of the column definition grammar for index : '[UNIQUE [KEY]] [[PRIMARY] KEY]'
+
 
 %% index 
 k_idx_def -> k_normal_idx_def : '$1'.

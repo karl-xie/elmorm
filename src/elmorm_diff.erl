@@ -7,13 +7,14 @@
 
 diff(TableA, TableB) ->
     {ok, TableOptDiff} = calc_table_options(TableA, TableB),
-    {ok, ColDrops, ColAdds, ColModifys} = calc_column_operate(TableA, TableB),
+    {ok, ColDrops, ColAdds, ColModifys, ColChanges} = calc_column_operate(TableA, TableB),
     {ok, IndexDiff} = calc_index_operate(TableA, TableB),
     Map1 = #{
         table_opt_diff => TableOptDiff,
         col_remove => ColDrops,
         col_add => ColAdds,
-        col_modify => ColModifys
+        col_modify => ColModifys,
+        col_change => ColChanges
     },
     Map = maps:merge(Map1, IndexDiff),
     {ok, Map}.
@@ -42,10 +43,23 @@ calc_column_operate(TableA, TableB) ->
     #elm_table{fields = FieldsB0, options = TabOptions} = TableB,
     FieldsA = [X#elm_field{seq = 0} || X <- FieldsA0],
     FieldsB = [X#elm_field{seq = 0} || X <- FieldsB0],
-    {ok, Drops, RestFieldsA} = drop_columns(FieldsA, FieldsB),
-    {ok, Adds} = add_columns(RestFieldsA, FieldsB),
-    {ok, Modifys} = modify_columns(RestFieldsA, FieldsB, Adds, TabOptions),
-    {ok, Drops, Adds, Modifys}.
+    {ok, Changes, RestFieldsA0} = change_columns(FieldsA, FieldsB),
+    {ok, Drops, RestFieldsA1} = drop_columns(RestFieldsA0, FieldsB),
+    {ok, Adds} = add_columns(RestFieldsA1, FieldsB),
+    {ok, Modifys} = modify_columns(RestFieldsA1, FieldsB, Adds, TabOptions),
+    {ok, Drops, Adds, Modifys, Changes}.
+
+change_columns(FieldsA, FieldsB) ->
+    change_columns(FieldsA, FieldsB, [], []).
+change_columns([], _FieldsB, Changes, Rest) ->
+    {ok, lists:reverse(Changes), lists:reverse(Rest)};
+change_columns([H | T], FieldsB, Changes, Rest) ->
+    case lists:keyfind(H#elm_field.name, #elm_field.old_name, FieldsB) of
+        #elm_field{} = TCol ->
+            change_columns(T, FieldsB, [{H#elm_field.name, TCol} | Changes], Rest);
+        false -> 
+            change_columns(T, FieldsB, Changes, [H | Rest])
+    end.
 
 drop_columns(FieldsA, FieldsB) ->
     drop_columns(FieldsA, FieldsB, [], []).
@@ -55,7 +69,6 @@ drop_columns([H | T], FieldsB, Drops, Rest) ->
     case lists:keyfind(H#elm_field.name, #elm_field.name, FieldsB) of
     false ->
         drop_columns(T, FieldsB, [H | Drops], Rest);
-
     _ ->
         drop_columns(T, FieldsB, Drops, [H | Rest])
     end.

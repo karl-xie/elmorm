@@ -76,19 +76,21 @@ table_diff(TableA, TableB, Opts) ->
         prikey_remove := PriKeyRemove, 
         prikey_add := PriKeyAdd,
         idx_remove := IdxRemove,
-        idx_add := IdxAdd
+        idx_add := IdxAdd,
+        col_change := ColChanges
     } = DiffMap,
     L0 = build_table_options(ALTER, TableOptDiff),
-    L1 = [<<ALTER/binary, "DROP COLUMN `", (X#elm_field.name)/binary, "`;">> || X <- ColDrops],
-    L2 = [<<ALTER/binary, "ADD COLUMN ", (format_table_field(X, true))/binary, ";">> || X <- ColAdds],
-    L3 = [<<ALTER/binary, "MODIFY COLUMN ", (format_table_field(X, true))/binary, ";">> || X <- ColModifys],
-    L4 = [<<ALTER/binary, "DROP PRIMARY KEY;">> || _ <- PriKeyRemove],
-    L5 = [<<ALTER/binary, "ADD PRIMARY KEY ", (format_key_parts(X#elm_index.fields))/binary, ";">> || X <- PriKeyAdd],
-    L6 = [<<ALTER/binary, "DROP INDEX `", (X#elm_index.name)/binary, "`;">> || X <- IdxRemove],
-    L7 = [<<ALTER/binary, "ADD ", (format_table_index(X))/binary, ";">> || X <- IdxAdd],
+    L1 = [<<ALTER/binary, "CHANGE COLUMN `", XOldName/binary, "` ", (format_table_field(X, true))/binary, ";">> || {XOldName, X} <- ColChanges],
+    L2 = [<<ALTER/binary, "DROP COLUMN `", (X#elm_field.name)/binary, "`;">> || X <- ColDrops],
+    L3 = [<<ALTER/binary, "ADD COLUMN ", (format_table_field(X, true))/binary, ";">> || X <- ColAdds],
+    L4 = [<<ALTER/binary, "MODIFY COLUMN ", (format_table_field(X, true))/binary, ";">> || X <- ColModifys],
+    L5 = [<<ALTER/binary, "DROP PRIMARY KEY;">> || _ <- PriKeyRemove],
+    L6 = [<<ALTER/binary, "ADD PRIMARY KEY ", (format_key_parts(X#elm_index.fields))/binary, ";">> || X <- PriKeyAdd],
+    L7 = [<<ALTER/binary, "DROP INDEX `", (X#elm_index.name)/binary, "`;">> || X <- IdxRemove],
+    L8 = [<<ALTER/binary, "ADD ", (format_table_index(X))/binary, ";">> || X <- IdxAdd],
     L = lists:foldl(fun(Y, InAcc) ->
         Y ++ InAcc
-    end, [], [L7, L6, L5, L4, L3, L2, L1, L0]),
+    end, [], [L8, L7, L6, L5, L4, L3, L2, L1, L0]),
     connact_table_diff(L, Opts).
 connact_table_diff(L, Opts) ->
     connact_table_diff(L, Opts, <<>>).

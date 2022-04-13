@@ -29,7 +29,8 @@
     data_len :: integer(),
     charset :: binary(),
     is_signed :: boolean(),
-    options :: map()
+    options :: map(),
+    old_name :: binary()
 }).
 
 -record(elm_table, {
@@ -38,7 +39,8 @@
     fields :: [#elm_field{}],
     primary_key :: [#elm_index{}],
     index :: [#elm_index{}],
-    idx_name_map :: #{}
+    idx_name_map :: #{},
+    idxed_colname_map :: #{}
 }).
 
 -record(elm_alter_op, {
@@ -79,7 +81,8 @@
     comment => undefined,
     storage => undefined,
     collate => undefined,
-    auto_increment => undefined
+    auto_increment => undefined,
+    idx_type => undefined
 }).
 
 -define(COLUMN_OPTS_SEQ, [collate, storage, null, default, auto_increment, comment]).
