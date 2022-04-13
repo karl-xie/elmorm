@@ -7,8 +7,8 @@
 
 diff(TableA, TableB) ->
     {ok, TableOptDiff} = calc_table_options(TableA, TableB),
-    {ok, ColDrops, ColAdds, ColModifys, ColChanges} = calc_column_operate(TableA, TableB),
-    {ok, IndexDiff} = calc_index_operate(TableA, TableB),
+    {ok, ColDrops, ColAdds, ColModifys, ColChanges, TableA2} = calc_column_operate(TableA, TableB),
+    {ok, IndexDiff} = calc_index_operate(TableA2, TableB),
     Map1 = #{
         table_opt_diff => TableOptDiff,
         col_remove => ColDrops,
@@ -44,10 +44,11 @@ calc_column_operate(TableA, TableB) ->
     FieldsA = [X#elm_field{seq = 0} || X <- FieldsA0],
     FieldsB = [X#elm_field{seq = 0} || X <- FieldsB0],
     {ok, Changes, RestFieldsA0} = change_columns(FieldsA, FieldsB),
+    TableA2 = upgrade_table_by_change_column(Changes, TableA),
     {ok, Drops, RestFieldsA1} = drop_columns(RestFieldsA0, FieldsB),
     {ok, Adds} = add_columns(RestFieldsA1, FieldsB),
     {ok, Modifys} = modify_columns(RestFieldsA1, FieldsB, Adds, TabOptions),
-    {ok, Drops, Adds, Modifys, Changes}.
+    {ok, Drops, Adds, Modifys, Changes, TableA2}.
 
 change_columns(FieldsA, FieldsB) ->
     change_columns(FieldsA, FieldsB, [], []).
@@ -56,7 +57,7 @@ change_columns([], _FieldsB, Changes, Rest) ->
 change_columns([H | T], FieldsB, Changes, Rest) ->
     case lists:keyfind(H#elm_field.name, #elm_field.old_name, FieldsB) of
         #elm_field{} = TCol ->
-            change_columns(T, FieldsB, [{H#elm_field.name, TCol} | Changes], Rest);
+            change_columns(T, FieldsB, [{H#elm_field.name, TCol} | Changes], [TCol | Rest]);
         false -> 
             change_columns(T, FieldsB, Changes, [H | Rest])
     end.
@@ -256,3 +257,19 @@ unify_options(Options) ->
         _ -> Options2
         end,
     Options3.
+
+upgrade_table_by_change_column(Changes, TableA) ->
+    OpList = [begin
+        #elm_alter_op{
+            method = change,
+            old_col_name = OldName,
+            field = Col,
+            opt_seq = undefined
+        }
+    end || {OldName, Col} <- Changes],
+    Alter = #elm_alter{
+        table = TableA#elm_table.name,
+        op_list = OpList
+    },
+    {ok, [TableA2]} = elmorm_compile:apply_alter(Alter, [TableA]),
+    TableA2.

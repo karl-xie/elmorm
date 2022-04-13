@@ -5,6 +5,7 @@
 -export([parse_file/1]).
 -export([parse_binary/1]).
 -export([type_default_len/2]).
+-export([apply_alter/2]).
 
 parse_file(FileName) ->
     case file:read_file(FileName) of
@@ -837,5 +838,5 @@ decrease_idxed_colname(Name, ICM) ->
     New = Old - 1,
     case New > 0 of
         true -> maps:put(Name, New, maps:put(Name, New, ICM));
-        _ -> mpas:remove(Name, ICM)
+        _ -> maps:remove(Name, ICM)
     end.
